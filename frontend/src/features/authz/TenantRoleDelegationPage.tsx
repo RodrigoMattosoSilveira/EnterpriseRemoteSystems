@@ -1,3 +1,4 @@
+import { PermissionGatedLink } from "../../components/layout/PermissionGatedLink";
 import { useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
@@ -124,9 +125,9 @@ export function TenantRoleDelegationPage({ readOnly = false }: { readOnly?: bool
 
       <section className="mx-auto max-w-5xl space-y-4 p-4">
         <div className="flex justify-end">
-          <Link to="/people" className="rounded-lg border bg-white px-3 py-2 text-sm font-semibold text-gray-800">
+          <PermissionGatedLink to="/people" className="rounded-lg border bg-white px-3 py-2 text-sm font-semibold text-gray-800">
             {t("admin.roles.open.people_91a942")}
-          </Link>
+          </PermissionGatedLink>
         </div>
         {message && <div role="status" className="rounded-xl border border-green-200 bg-green-50 p-3 text-sm text-green-800">{message}</div>}
         <ApiErrorPanel error={actorsQuery.error ?? setActorActiveMutation.error ?? grantMutation.error ?? revokeMutation.error} translate={t} />

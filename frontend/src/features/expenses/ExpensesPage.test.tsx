@@ -118,7 +118,7 @@ describe("ExpensesPage", () => {
     );
     expect(fetch).not.toHaveBeenCalled();
   });
-  it("shows a navigation link back to People", async () => {
+  it("hides the People navigation link when the actor cannot open /people", async () => {
     mockExpensePageFetch();
 
     renderExpensesPage("/expenses");
@@ -129,7 +129,9 @@ describe("ExpensesPage", () => {
       (candidate) => candidate.textContent?.trim() === "People",
     );
 
-    expect(peopleLink?.getAttribute("href")).toBe("/people");
+    // The test actor holds only expenses.read, so /people is not reachable from
+    // the side menu and the back link is hidden by PermissionGatedLink.
+    expect(peopleLink).toBeUndefined();
   });
 
   it("navigates expense pages", async () => {

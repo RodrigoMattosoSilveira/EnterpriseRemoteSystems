@@ -80,6 +80,17 @@ def main() -> int:
     for marker in required_workflow_markers:
         if marker not in workflow:
             raise AssertionError(f"deployment workflow is missing 30L.4B contract marker: {marker}")
+
+    # A deployment used to fail silently when a Playwright test fixture changed
+    # its date-range constant. Only revision/tree identity is a release gate here;
+    # the actual Playwright suite verifies fixture correctness in the next step.
+    verification_step = workflow.split("- name: Show deployed Playwright target", 1)[1].split(
+        "- name: Set up Node", 1
+    )[0]
+    if 'echo "PASS: Deployed Playwright checkout matches deployed revision and tree"' not in verification_step:
+        raise AssertionError("missing successful deployed revision/tree verification output")
+    if "grep -n " in verification_step:
+        raise AssertionError("deployed checkout validation must not grep test-fixture constants")
     if "bite32-release-coverage-check" not in makefile:
         raise AssertionError("Makefile is missing Bite 32 release coverage target")
     if "bite326-release-hardening-check" not in makefile:

@@ -1,3 +1,4 @@
+import { PermissionGatedLink } from "../../components/layout/PermissionGatedLink";
 import { useI18n, type I18nContextValue } from "../../i18n";
 import { useMemo, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
@@ -192,9 +193,9 @@ export function PriceListPage() {
             <Link className="text-sm font-semibold text-gray-700 underline" to="/expenses/new">
               {t("price.page.new.expense_7c3ae0")}
             </Link>
-            <Link className="text-sm font-semibold text-gray-700 underline" to="/people">
+            <PermissionGatedLink className="text-sm font-semibold text-gray-700 underline" to="/people">
               {t("price.page.back.to.people_59f4cb")}
-            </Link>
+            </PermissionGatedLink>
           </div>
         </div>
       </header>

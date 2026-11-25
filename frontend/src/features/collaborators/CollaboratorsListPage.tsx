@@ -1,3 +1,4 @@
+import { PermissionGatedLink } from "../../components/layout/PermissionGatedLink";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
@@ -103,12 +104,12 @@ export function CollaboratorsListPage() {
 
           {canBrowseCollaborators ? (
             <div className="flex items-center gap-2">
-              <Link
+              <PermissionGatedLink
                 to="/people"
                 className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"
               >
                 {t("nav.people")}
-              </Link>
+              </PermissionGatedLink>
               <Link
                 to="/expenses"
                 className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm"

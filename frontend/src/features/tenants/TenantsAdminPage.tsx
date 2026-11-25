@@ -1,3 +1,4 @@
+import { PermissionGatedLink } from "../../components/layout/PermissionGatedLink";
 import { FormEvent, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { ApiError } from "../../api/client";
@@ -87,7 +88,7 @@ export function TenantsAdminPage() {
               <>
                 <Link className="underline" to="/admin/authorization">{t("common.authorization")}</Link>
                 <Link className="underline" to="/admin/reference-data">{t("common.referenceData")}</Link>
-                <Link className="underline" to="/people">{t("common.backToPeople")}</Link>
+                <PermissionGatedLink className="underline" to="/people">{t("common.backToPeople")}</PermissionGatedLink>
               </>
             )}
           </div>

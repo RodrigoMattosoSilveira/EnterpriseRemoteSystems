@@ -1,3 +1,4 @@
+import { PermissionGatedLink } from "../../components/layout/PermissionGatedLink";
 import { useI18n, type TranslationKey } from "../../i18n";
 import { FormEvent, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
@@ -147,18 +148,18 @@ export function ReferenceDataAdminPage() {
           </div>
 
           <div className="flex flex-wrap items-center justify-end gap-2">
-            <Link className="text-sm font-semibold text-gray-700 underline" to="/admin/tenants">
+            <PermissionGatedLink className="text-sm font-semibold text-gray-700 underline" to="/admin/tenants">
               {t("admin.reference.tenants_1f7ae7")}
-            </Link>
+            </PermissionGatedLink>
             <Link className="text-sm font-semibold text-gray-700 underline" to="/admin/gold-prices">
               {t("admin.reference.gold.prices_d529be")}
             </Link>
             <Link className="text-sm font-semibold text-gray-700 underline" to="/admin/price-list-items">
               {t("admin.reference.price.list_760d09")}
             </Link>
-            <Link className="text-sm font-semibold text-gray-700 underline" to="/people">
+            <PermissionGatedLink className="text-sm font-semibold text-gray-700 underline" to="/people">
               {t("admin.reference.back.to.people_59f4cb")}
-            </Link>
+            </PermissionGatedLink>
           </div>
         </div>
       </header>

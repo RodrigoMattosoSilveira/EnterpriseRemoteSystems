@@ -1,3 +1,4 @@
+import { PermissionGatedLink } from "../../components/layout/PermissionGatedLink";
 import { useI18n } from "../../i18n";
 import type { TranslationKey } from "../../i18n/resources";
 import { Fragment, FormEvent, useEffect, useMemo, useState } from "react";
@@ -112,9 +113,9 @@ export function AuditLogViewerPage() {
             <Link className="text-sm font-semibold text-gray-700 underline" to="/admin/price-list-items">
               {t("admin.audit.price.list_760d09")}
             </Link>
-            <Link className="text-sm font-semibold text-gray-700 underline" to="/people">
+            <PermissionGatedLink className="text-sm font-semibold text-gray-700 underline" to="/people">
               {t("admin.audit.back.to.people_59f4cb")}
-            </Link>
+            </PermissionGatedLink>
           </div>
         </div>
       </header>
