@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   assignTenantAdmin,
+  createInitialTenantAdminCandidate,
   createTenant,
   getTenant,
   listTenantAdminCandidates,
@@ -9,7 +10,7 @@ import {
   setTenantActive,
   updateTenant,
 } from "../../api/tenants.api";
-import type { CreateTenantInput, UpdateTenantInput } from "../../types/tenants";
+import type { CreateTenantInput, UpdateTenantInput, InitialTenantAdminCandidateInput } from "../../types/tenants";
 
 const tenantsKey = ["tenants"] as const;
 
@@ -83,6 +84,17 @@ export function useRevokeTenantAdmin(id: string) {
       queryClient.setQueryData([...tenantsKey, id], tenant);
       queryClient.invalidateQueries({ queryKey: tenantsKey });
       queryClient.invalidateQueries({ queryKey: [...tenantsKey, id, "admin-candidates"] });
+    },
+  });
+}
+
+export function useCreateInitialTenantAdminCandidate(id: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: InitialTenantAdminCandidateInput) => createInitialTenantAdminCandidate(id, input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [...tenantsKey, id, "admin-candidates"] });
+      queryClient.invalidateQueries({ queryKey: tenantsKey });
     },
   });
 }

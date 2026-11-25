@@ -97,6 +97,24 @@ func (h *Handler) ListTenantAdminCandidates(c fiber.Ctx) error {
 	return httpx.OK(c, candidates)
 }
 
+// CreateInitialTenantAdminCandidate is global-control-plane only, and cannot
+// create a tenant role grant or impersonate a tenant Actor.
+func (h *Handler) CreateInitialTenantAdminCandidate(c fiber.Ctx) error {
+	actor, err := authz.ResolveRequestActor(c, h.actorStore)
+	if err != nil || actor == nil || actor.Scope != authz.ActorScopeApplication || actor.AccountID == "" || actor.RecordID == "" {
+		return httpx.WriteError(c, authz.ErrForbidden)
+	}
+	var req CreateInitialTenantAdminCandidateRequest
+	if err := c.Bind().Body(&req); err != nil {
+		return httpx.BadRequest(c, "invalid_body", "Invalid request body")
+	}
+	created, err := h.service.CreateInitialTenantAdminCandidate(c.Context(), c.Params("id"), req, actor.AccountID, actor.RecordID, authz.RequestCorrelationID(c))
+	if err != nil {
+		return httpx.WriteError(c, err)
+	}
+	return httpx.Created(c, created)
+}
+
 func (h *Handler) AssignTenantAdmin(c fiber.Ctx) error {
 	var req AssignTenantAdminRequest
 	if err := c.Bind().Body(&req); err != nil {
