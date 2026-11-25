@@ -37,6 +37,7 @@ type Repository interface {
 	ExistsByID(ctx context.Context, id string) (bool, error)
 	ExistsActiveByID(ctx context.Context, id string) (bool, error)
 	ListTenantAdminCandidates(ctx context.Context, tenantID string) ([]TenantAdminCandidateRecord, error)
+	CreateInitialTenantAdminCandidate(ctx context.Context, tenantID string, req CreateInitialTenantAdminCandidateRequest, passwordHash string, operatorAccountID string, operatorActorID string, correlationID string) (*InitialTenantAdminCandidateDTO, error)
 	AssignTenantAdmin(ctx context.Context, tenantID string, actorID string) error
 	RevokeTenantAdmin(ctx context.Context, tenantID string, actorID string) error
 }
