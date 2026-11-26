@@ -3,9 +3,12 @@ package tenants
 import (
 	"context"
 	"errors"
+	"fmt"
+	"golang.org/x/crypto/bcrypt"
 	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"enterpriseremotesystems/backend/internal/db"
 	"enterpriseremotesystems/backend/internal/shared/ids"
@@ -274,4 +277,95 @@ func newValidationError(fields map[string]string) error {
 		return nil
 	}
 	return ValidationError{Fields: clean}
+}
+
+// CreateInitialTenantAdminCandidate is a bounded control-plane recovery for the
+// chicken-and-egg case of an active Tenant with no eligible admin candidate.
+// It never grants TENANT_ADMIN; the existing assignment workflow remains the
+// only way to grant it.
+func (s *service) CreateInitialTenantAdminCandidate(ctx context.Context, tenantID string, req CreateInitialTenantAdminCandidateRequest, operatorAccountID string, operatorActorID string, correlationID string) (*InitialTenantAdminCandidateDTO, error) {
+	req.ActorKey = strings.TrimSpace(req.ActorKey)
+	req.FirstName = strings.TrimSpace(req.FirstName)
+	req.LastName = strings.TrimSpace(req.LastName)
+	req.Nickname = strings.TrimSpace(req.Nickname)
+	req.CPF = normalizeIdentityDigits(req.CPF)
+	req.RG = strings.TrimSpace(req.RG)
+	req.Cellular = normalizeIdentityDigits(req.Cellular)
+	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
+	fields := map[string]string{}
+	for key, value := range map[string]string{"firstName": req.FirstName, "lastName": req.LastName, "nickname": req.Nickname, "cpf": req.CPF, "rg": req.RG, "cellular": req.Cellular, "email": req.Email} {
+		if value == "" {
+			fields[key] = "Required"
+		}
+	}
+	if req.CPF != "" && !validInitialAdminCPF(req.CPF) {
+		fields["cpf"] = "CPF is invalid"
+	}
+	if req.RG != "" && !regexp.MustCompile(`^[A-Za-z0-9.\-]{5,20}$`).MatchString(req.RG) {
+		fields["rg"] = "RG is invalid"
+	}
+	if req.Cellular != "" && !regexp.MustCompile(`^[1-9]{2}9[0-9]{8}$|^55[1-9]{2}9[0-9]{8}$`).MatchString(req.Cellular) {
+		fields["cellular"] = "Cellular is invalid"
+	}
+	if req.Email != "" && !regexp.MustCompile(`^[^\s@]+@[^\s@]+\.[^\s@]+$`).MatchString(req.Email) {
+		fields["email"] = "Email is invalid"
+	}
+	if !regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:@-]{0,119}$`).MatchString(req.ActorKey) {
+		fields["actorKey"] = "Actor key must be a valid, unique identifier"
+	}
+	if len(req.FirstName) > 120 || len(req.LastName) > 120 || len(req.Nickname) > 120 {
+		fields["firstName"] = "Person names must be at most 120 characters"
+	}
+	if strings.ContainsAny(req.TemporaryPassword, "\r\n\x00") || utf8.RuneCountInString(req.TemporaryPassword) < 12 || len([]byte(req.TemporaryPassword)) > 72 {
+		fields["temporaryPassword"] = "Use a password of 12–72 UTF-8 bytes, without line breaks"
+	}
+	if len(fields) > 0 {
+		return nil, ValidationError{Fields: fields}
+	}
+	if strings.TrimSpace(tenantID) == "" || strings.TrimSpace(operatorActorID) == "" || strings.TrimSpace(operatorAccountID) == "" {
+		return nil, fmt.Errorf("initial Tenant Administrator candidate requires authenticated global operator and Tenant")
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(req.TemporaryPassword), 12)
+	if err != nil {
+		return nil, err
+	}
+	return s.repo.CreateInitialTenantAdminCandidate(ctx, tenantID, req, string(hash), operatorAccountID, operatorActorID, correlationID)
+}
+
+// These are the same CPF check digits used by the normal Person form. This
+// control-plane path cannot import people because people imports tenants.
+func normalizeIdentityDigits(value string) string {
+	return regexp.MustCompile(`\D`).ReplaceAllString(value, "")
+}
+
+func validInitialAdminCPF(cpf string) bool {
+	if len(cpf) != 11 {
+		return false
+	}
+	same := true
+	for i := 0; i < len(cpf); i++ {
+		if cpf[i] < '0' || cpf[i] > '9' {
+			return false
+		}
+		if cpf[i] != cpf[0] {
+			same = false
+		}
+	}
+	if same {
+		return false
+	}
+	for length := 9; length <= 10; length++ {
+		sum := 0
+		for i := 0; i < length; i++ {
+			sum += int(cpf[i]-'0') * (length + 1 - i)
+		}
+		check := 11 - sum%11
+		if check >= 10 {
+			check = 0
+		}
+		if check != int(cpf[length]-'0') {
+			return false
+		}
+	}
+	return true
 }

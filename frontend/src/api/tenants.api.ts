@@ -3,6 +3,8 @@ import type {
   CreateTenantInput,
   Tenant,
   TenantAdminCandidate,
+  InitialTenantAdminCandidateInput,
+  InitialTenantAdminCandidateResult,
   UpdateTenantInput,
 } from "../types/tenants";
 
@@ -70,6 +72,13 @@ export function normalizeTenantAdminCandidates(input: unknown): TenantAdminCandi
       typeof candidate.active === "boolean" &&
       typeof candidate.assigned === "boolean"
     );
+  });
+}
+
+export function createInitialTenantAdminCandidate(id: string, input: InitialTenantAdminCandidateInput): Promise<InitialTenantAdminCandidateResult> {
+  return apiFetch<InitialTenantAdminCandidateResult>(`/tenants/${encodeURIComponent(id)}/initial-admin-candidate`, {
+    method: "POST",
+    body: JSON.stringify(input),
   });
 }
 
