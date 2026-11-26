@@ -24,13 +24,14 @@ git push origin development
 
 ## Verify DEV:
 ```bash
-cd /opt/EnterpriseRemocd ../t teSystems/development
+cd /opt/EnterpriseRemoteSystems//development
 
-docker logs ers-dev-backend --since=5m --tail=200
-docker logs -f ers-dev-backend
-container=ers-dev-backend; printf 'Created=%s %s\n' "$(TZ=America/Los_Angeles date --date="$(docker inspect "$container" --format '{{.Created}}')" '+%Y-%m-%d %I:%M:%S %p %Z')" "$(docker inspect "$container" --format 'Status={{.State.Status}} Health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}')"
-docker exec ers-dev-backend curl -i http://localhost:8080/api/v1/healthz
-curl -i https://dev.enterpriseremotesystems.com/api/v1/healthz
+V_ENV=dev -- verification environment
+docker logs ers-"$V_ENV"-backend --since=5m --tail=200
+docker logs -f ers-"$V_ENV"-backend
+container=ers-tst-backend; printf 'Created=%s %s\n' "$(TZ=America/Los_Angeles date --date="$(docker inspect "$container" --format '{{.Created}}')" '+%Y-%m-%d %I:%M:%S %p %Z')" "$(docker inspect "$container" --format 'Status={{.State.Status}} Health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}')"
+docker exec ers-"$V_ENV"-backend curl -i http://localhost:8080/api/v1/healthz
+curl -i https://"$V_ENV".enterpriseremotesystems.com/api/v1/healthz
 ```
 
 ## Verify migration:
@@ -62,12 +63,12 @@ git push origin test
 ```bash
 cd /opt/EnterpriseRemoteSystems/test
 
-
-docker logs ers-tst-backend --since=5m --tail=200
-docker logs -f ers-tst-backend
+V_ENV=tst -- verification environment
+docker logs ers-"$V_ENV"-backend --since=5m --tail=200
+docker logs -f ers-"$V_ENV"-backend
 container=ers-tst-backend; printf 'Created=%s %s\n' "$(TZ=America/Los_Angeles date --date="$(docker inspect "$container" --format '{{.Created}}')" '+%Y-%m-%d %I:%M:%S %p %Z')" "$(docker inspect "$container" --format 'Status={{.State.Status}} Health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}')"
-docker exec ers-tst-backend curl -i http://localhost:8080/api/v1/healthz
-curl -i https://tst.enterpriseremotesystems.com/api/v1/healthz
+docker exec ers-"$V_ENV"-backend curl -i http://localhost:8080/api/v1/healthz
+curl -i https://"$V_ENV".enterpriseremotesystems.com/api/v1/healthz
 ```
 
 ## Verify migration:
@@ -101,11 +102,12 @@ git push origin production
 ```bash
 cd /opt/EnterpriseRemoteSystems/production
 
-docker logs ers-prd-backend --since=5m --tail=200
-docker logs -f ers-prd-backend
-container=ers-prd-backend; printf 'Created=%s %s\n' "$(TZ=America/Los_Angeles date --date="$(docker inspect "$container" --format '{{.Created}}')" '+%Y-%m-%d %I:%M:%S %p %Z')" "$(docker inspect "$container" --format 'Status={{.State.Status}} Health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}')"
-docker exec ers-prd-backend curl -i http://localhost:8080/api/v1/healthz
-curl -i https://app.enterpriseremotesystems.com/api/v1/healthz
+V_ENV=prd -- verification environment
+docker logs ers-"$V_ENV"-backend --since=5m --tail=200
+docker logs -f ers-"$V_ENV"-backend
+container=ers-tst-backend; printf 'Created=%s %s\n' "$(TZ=America/Los_Angeles date --date="$(docker inspect "$container" --format '{{.Created}}')" '+%Y-%m-%d %I:%M:%S %p %Z')" "$(docker inspect "$container" --format 'Status={{.State.Status}} Health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}')"
+docker exec ers-"$V_ENV"-backend curl -i http://localhost:8080/api/v1/healthz
+curl -i https://"$V_ENV".enterpriseremotesystems.com/api/v1/healthz
 ```
 
 ## Verify production migration:
@@ -122,4 +124,5 @@ sqlite3 /app/data/app.db ".schema ledger_receipts"
 docker exec ers-prd-backend \
   sqlite3 /app/data/app.db \
   'SELECT filename FROM schema_migrations WHERE filename = "000019_create_ledger_receipts.up.sql";'
+  
 ```

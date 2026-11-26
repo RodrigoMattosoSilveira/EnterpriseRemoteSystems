@@ -29,6 +29,28 @@ export type UpdateTenantInput = {
   description?: string;
 };
 
+export type InitialTenantAdminCandidateInput = {
+  actorKey: string;
+  firstName: string;
+  lastName: string;
+  nickname: string;
+  cpf: string;
+  rg: string;
+  cellular: string;
+  email: string;
+  temporaryPassword: string;
+};
+
+export type InitialTenantAdminCandidateResult = {
+  actorId: string;
+  actorKey: string;
+  accountId: string;
+  login: string;
+  globalPersonId: string;
+  membershipId: string;
+  tenantId: string;
+};
+
 export type TenantAdminCandidate = {
   actorId: string;
   actorKey: string;

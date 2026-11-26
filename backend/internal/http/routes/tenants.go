@@ -14,6 +14,7 @@ func RegisterTenantRoutes(router fiber.Router, deps Dependencies) {
 	tenants.Post("/", requireApplicationPermission(deps, authz.PermissionTenantsCreate), deps.TenantHandler.Create)
 
 	tenants.Get("/:id/admin-candidates", requireApplicationPermission(deps, authz.PermissionTenantsUpdate), deps.TenantHandler.ListTenantAdminCandidates)
+	tenants.Post("/:id/initial-admin-candidate", requireApplicationPermission(deps, authz.PermissionTenantsUpdate), deps.TenantHandler.CreateInitialTenantAdminCandidate)
 	tenants.Post("/:id/admins", requireApplicationPermission(deps, authz.PermissionTenantsUpdate), deps.TenantHandler.AssignTenantAdmin)
 	tenants.Delete("/:id/admins/:actorId", requireApplicationPermission(deps, authz.PermissionTenantsUpdate), deps.TenantHandler.RevokeTenantAdmin)
 	tenants.Patch("/:id/active", requireApplicationPermission(deps, authz.PermissionTenantsUpdate), deps.TenantHandler.SetActive)
