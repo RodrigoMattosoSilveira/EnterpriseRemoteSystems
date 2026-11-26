@@ -3,10 +3,11 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { ActionSuccessDialog } from "../../components/ActionSuccessDialog";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
-import type { UpdateTenantInput } from "../../types/tenants";
+import type { UpdateTenantInput, InitialTenantAdminCandidateInput } from "../../types/tenants";
 import { OperationalStatusBadge } from "./TenantsAdminPage";
 import {
   useAssignTenantAdmin,
+  useCreateInitialTenantAdminCandidate,
   useRevokeTenantAdmin,
   useSetTenantActive,
   useTenant,
@@ -17,6 +18,10 @@ import { PageContextHeading, PageTitle } from "../../components/layout/PageHeadi
 import { useI18n } from "../../i18n";
 
 const emptyForm: UpdateTenantInput = { code: "", name: "", description: "" };
+const emptyInitialCandidate: InitialTenantAdminCandidateInput = {
+  actorKey: "", firstName: "", lastName: "", nickname: "",
+  cpf: "", rg: "", cellular: "", email: "", temporaryPassword: "",
+};
 
 export function TenantDetailPage() {
   const { t } = useI18n();
@@ -26,9 +31,12 @@ export function TenantDetailPage() {
   const updateMutation = useUpdateTenant(id);
   const activeMutation = useSetTenantActive(id);
   const assignMutation = useAssignTenantAdmin(id);
+  const initialCandidateMutation = useCreateInitialTenantAdminCandidate(id);
   const revokeMutation = useRevokeTenantAdmin(id);
   const [form, setForm] = useState<UpdateTenantInput>(emptyForm);
   const [selectedActorId, setSelectedActorId] = useState("");
+  const [showInitialCandidate, setShowInitialCandidate] = useState(false);
+  const [initialCandidate, setInitialCandidate] = useState<InitialTenantAdminCandidateInput>(emptyInitialCandidate);
   const [successMessage, setSuccessMessage] = useState("");
 
   useEffect(() => {
@@ -59,7 +67,7 @@ export function TenantDetailPage() {
     (candidate) => !candidate.assigned && candidate.eligible === false,
   );
   const actionError =
-    updateMutation.error ?? activeMutation.error ?? assignMutation.error ?? revokeMutation.error;
+    updateMutation.error ?? activeMutation.error ?? assignMutation.error ?? revokeMutation.error ?? initialCandidateMutation.error;
 
   async function handleUpdate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -85,6 +93,21 @@ export function TenantDetailPage() {
       setSuccessMessage(t(active ? "admin.tenantDetail.activated" : "admin.tenantDetail.deactivated", { name: updated.name }));
     } catch {
       // Mutation error is rendered by ApiErrorPanel.
+    }
+  }
+
+  async function handleCreateInitialCandidate(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSuccessMessage("");
+    initialCandidateMutation.reset();
+    try {
+      const candidate = await initialCandidateMutation.mutateAsync(initialCandidate);
+      setInitialCandidate(emptyInitialCandidate);
+      setShowInitialCandidate(false);
+      setSelectedActorId(candidate.actorId);
+      setSuccessMessage(t("admin.tenantDetail.initialCandidate.created"));
+    } catch {
+      // API error is rendered by ApiErrorPanel; no credential echoed.
     }
   }
 
@@ -246,6 +269,50 @@ export function TenantDetailPage() {
                 </button>
               </div>
 
+              {!candidatesQuery.isLoading && tenant.active && tenantAdminAssignmentCount === 0 && candidates.length === 0 && (
+                <div className="mt-4 rounded-xl border border-gray-200 p-4">
+                  <p className="text-sm text-gray-700">{t("admin.tenantDetail.initialCandidate.description")}</p>
+                  {!showInitialCandidate ? (
+                    <button type="button" className="mt-3 rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white" onClick={() => setShowInitialCandidate(true)}>
+                      {t("admin.tenantDetail.initialCandidate.open")}
+                    </button>
+                  ) : (
+                    <form className="mt-3 grid gap-3 sm:grid-cols-2" onSubmit={handleCreateInitialCandidate}>
+                      {([
+                        ["actorKey", "admin.tenantDetail.initialCandidate.actorKey"],
+                        ["firstName", "admin.tenantDetail.initialCandidate.firstName"],
+                        ["lastName", "admin.tenantDetail.initialCandidate.lastName"],
+                        ["nickname", "admin.tenantDetail.initialCandidate.nickname"],
+                        ["cpf", "admin.tenantDetail.initialCandidate.cpf"],
+                        ["rg", "admin.tenantDetail.initialCandidate.rg"],
+                        ["cellular", "admin.tenantDetail.initialCandidate.cellular"],
+                        ["email", "admin.tenantDetail.initialCandidate.email"],
+                        ["temporaryPassword", "admin.tenantDetail.initialCandidate.temporaryPassword"],
+                      ] as const).map(([key, labelKey]) => (
+                        <label className="grid gap-1 text-sm font-medium" key={key}>
+                          {t(labelKey)}
+                          <input
+                            autoComplete={key === "temporaryPassword" ? "new-password" : "off"}
+                            className="rounded-lg border border-gray-300 px-3 py-2"
+                            type={key === "temporaryPassword" ? "password" : key === "email" ? "email" : "text"}
+                            value={initialCandidate[key]}
+                            onChange={(event) => setInitialCandidate({ ...initialCandidate, [key]: event.target.value })}
+                            required
+                            minLength={key === "temporaryPassword" ? 12 : undefined}
+                          />
+                        </label>
+                      ))}
+                      <div className="sm:col-span-2">
+                        <p className="mb-3 text-sm text-gray-600">{t("admin.tenantDetail.initialCandidate.confirm")}</p>
+                        <div className="flex flex-wrap gap-2">
+                          <button type="submit" disabled={initialCandidateMutation.isPending} className="rounded-lg bg-gray-950 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{t("admin.tenantDetail.initialCandidate.submit")}</button>
+                          <button type="button" className="rounded-lg border px-4 py-2 text-sm" onClick={() => { setInitialCandidate(emptyInitialCandidate); setShowInitialCandidate(false); }}>{t("admin.tenantDetail.initialCandidate.cancel")}</button>
+                        </div>
+                      </div>
+                    </form>
+                  )}
+                </div>
+              )}
               {candidatesQuery.isLoading && <p className="mt-4 text-sm text-gray-500">{t("admin.tenantDetail.admins.loadingActors")}</p>}
               {!candidatesQuery.isLoading && tenantAdminAssignmentCount === 0 && (
                 <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">

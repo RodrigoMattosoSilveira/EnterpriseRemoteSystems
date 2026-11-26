@@ -72,6 +72,48 @@ describe("TenantDetailPage", () => {
     expect(container.textContent).toContain("Select an eligible active actor");
   });
 
+  it("creates the initial Account-bound Tenant Actor candidate without silently granting TENANT_ADMIN", async () => {
+    let added = false;
+    mockFetch(async (url, init) => {
+      calls.push({ url, method: init?.method ?? "GET", body: parseBody(init?.body) });
+      if (url === "/api/v1/tenants/north" && !init?.method) return json({ data: tenant });
+      if (url === "/api/v1/tenants/north/admin-candidates" && !init?.method) {
+        return json({ data: added ? [candidate] : [] });
+      }
+      if (url === "/api/v1/tenants/north/initial-admin-candidate" && init?.method === "POST") {
+        added = true;
+        return json({ data: { actorId: candidate.actorId, actorKey: candidate.actorKey, accountId: "account-1", login: "marina.oliveira@example.test", globalPersonId: "person-1", membershipId: "membership-1", tenantId: "north" } }, 201);
+      }
+      throw new Error(`Unhandled request: ${url}`);
+    });
+
+    renderPage();
+    await waitForText("Create first Tenant Administrator candidate");
+    await click("Create first Tenant Administrator candidate");
+    const fields: Record<string, string> = {
+      "New tenant Actor key": "TRN_FIRST_ADMIN", "First name": "Marina", "Last name": "Oliveira",
+      "Nickname": "Mari", "CPF": "52998224725", "RG": "12345678",
+      "Mobile number": "11912345678", "Unique login email": "marina.oliveira@example.test",
+      "Initial password (12–72 bytes)": "temporary-password-2026",
+    };
+    for (const [label, value] of Object.entries(fields)) {
+      const input = [...container.querySelectorAll("label")].find((node) => node.textContent?.includes(label))?.querySelector("input");
+      if (!input) throw new Error(`Missing input ${label}`);
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(input, value);
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+    }
+    const submit = [...container.querySelectorAll("button")].find((button) => button.textContent === "Create candidate");
+    expect(submit).toBeTruthy();
+    await act(async () => submit?.click());
+    const posted = calls.find((call) => call.url.endsWith("/initial-admin-candidate") && call.method === "POST");
+    expect(posted).toBeTruthy();
+    expect(posted?.body).toMatchObject({ actorKey: "TRN_FIRST_ADMIN", email: "marina.oliveira@example.test" });
+    expect(calls.some((call) => call.method === "POST" && call.url.endsWith("/admins"))).toBe(false);
+    await waitForText("Marina Oliveira");
+  });
+
   it("assigns a tenant administrator and deactivates the tenant", async () => {
     let assigned = false;
     let active = true;

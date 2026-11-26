@@ -10,6 +10,7 @@ type Service interface {
 	Update(ctx context.Context, id string, req UpdateTenantRequest) (*TenantDTO, error)
 	SetActive(ctx context.Context, id string, active bool) (*TenantDTO, error)
 	ListTenantAdminCandidates(ctx context.Context, tenantID string) ([]TenantAdminCandidateDTO, error)
+	CreateInitialTenantAdminCandidate(ctx context.Context, tenantID string, req CreateInitialTenantAdminCandidateRequest, operatorAccountID string, operatorActorID string, correlationID string) (*InitialTenantAdminCandidateDTO, error)
 	AssignTenantAdmin(ctx context.Context, tenantID string, actorID string) (*TenantDTO, error)
 	RevokeTenantAdmin(ctx context.Context, tenantID string, actorID string) (*TenantDTO, error)
 	RequireActive(ctx context.Context, tenantID string) error
