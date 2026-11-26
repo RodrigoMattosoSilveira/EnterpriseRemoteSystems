@@ -18,6 +18,27 @@ import { PageTitle } from "../../components/layout/PageHeading";
 import { useI18n } from "../../i18n";
 import { useAuthorizationContext } from "../../components/layout/AuthorizationContext";
 
+// A work period is completed once its end instant has passed. Comparing the
+// instant (endsAt) with now is timezone-safe: it does not depend on the user's
+// or the tenant's calendar date. An unparseable endsAt counts as not completed.
+export function isCompletedWorkPeriod(
+  workPeriod: { endsAt: string },
+  now: Date = new Date(),
+): boolean {
+  return Date.parse(workPeriod.endsAt) <= now.getTime();
+}
+
+// Today's date as YYYY-MM-DD in the user's local calendar. Used only as the
+// server-side upper bound (dateTo) so future-dated periods never fill the page;
+// whether a period is completed is decided by isCompletedWorkPeriod. Built from
+// local date parts, not toISOString(), which returns the UTC date.
+export function todayLocalDate(now: Date = new Date()): string {
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 export function MineProductionPage() {
   const { t, formatDate, formatNumber } = useI18n();
   const actor = useAuthorizationContext();
@@ -28,7 +49,13 @@ export function MineProductionPage() {
     null,
   );
   const [resetToken, setResetToken] = useState(0);
-  const workPeriodsQuery = useWorkPeriods({ pageSize: 200 });
+  // Work periods dated after today are never listed (server-side bound), so
+  // they cannot push completed periods off the first page. Periods dated today
+  // are fetched and then kept or dropped by their end time below.
+  const workPeriodsQuery = useWorkPeriods({
+    pageSize: 200,
+    dateTo: todayLocalDate(),
+  });
   const selectedWorkPeriodQuery = useWorkPeriod(selectedWorkPeriodId);
   const locationsQuery = useReferenceDataByType("location");
   const productionQuery = useGoldProductionEntries(
@@ -38,12 +65,20 @@ export function MineProductionPage() {
   const createMutation = useCreateMineProduction(selectedWorkPeriodId);
   const updateMutation = useUpdateMineProduction(selectedWorkPeriodId);
   const workPeriods = useMemo(
-    () => workPeriodsQuery.data?.items ?? [],
+    () =>
+      (workPeriodsQuery.data?.items ?? []).filter((row) =>
+        isCompletedWorkPeriod(row),
+      ),
     [workPeriodsQuery.data],
   );
   const selectedWorkPeriod =
     workPeriods.find((row) => row.id === selectedWorkPeriodId) ??
     selectedWorkPeriodQuery.data;
+  // A deep link can select a work period that has not ended yet (or is dated
+  // later). Block the form for it, matching the backend rule.
+  const isNotCompleted = Boolean(
+    selectedWorkPeriod && !isCompletedWorkPeriod(selectedWorkPeriod),
+  );
   const locations = useMemo(
     () => (locationsQuery.data ?? []).filter((row) => row.active),
     [locationsQuery.data],
@@ -194,15 +229,22 @@ export function MineProductionPage() {
           </section>
         </div>
 
-        {canManage ? <MineProductionForm
-          workDate={selectedWorkPeriod?.workDate}
+        {canManage ? <div className="space-y-4">
+          {isNotCompleted ? (
+            <p role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+              {t("production.notCompleted")}
+            </p>
+          ) : null}
+        <MineProductionForm
+          workDate={isNotCompleted ? undefined : selectedWorkPeriod?.workDate}
           locations={locations}
           editingEntry={editingEntry}
           pending={pending}
           resetToken={resetToken}
           onSubmit={submit}
           onCancelEdit={() => setEditingEntry(null)}
-        /> : null}
+        />
+        </div> : null}
       </section>
     </main>
   );

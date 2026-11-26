@@ -1,3 +1,4 @@
+import { PermissionGatedLink } from "../../components/layout/PermissionGatedLink";
 import { useI18n } from "../../i18n";
 import type { TranslationKey } from "../../i18n/resources";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
@@ -188,9 +189,9 @@ export function AuthzAdminPage() {
           </div>
 
           <div className="flex items-center gap-2">
-            <Link className="text-sm font-semibold text-gray-700 underline" to="/admin/tenants">
+            <PermissionGatedLink className="text-sm font-semibold text-gray-700 underline" to="/admin/tenants">
               {t("admin.authz.tenants_1f7ae7")}
-            </Link>
+            </PermissionGatedLink>
             <Link className="text-sm font-semibold text-gray-700 underline" to="/admin/authentication">
               {t("admin.authz.authentication_ee1acf")}
             </Link>

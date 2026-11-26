@@ -203,6 +203,31 @@ func requirePermission(deps Dependencies, permission authz.Permission) fiber.Han
 	}
 }
 
+// requireAnyPermission admits the actor when any listed permission is granted.
+func requireAnyPermission(deps Dependencies, permissions ...authz.Permission) fiber.Handler {
+	return func(c fiber.Ctx) error {
+		if deps.DisableRouteAuthorization {
+			return c.Next()
+		}
+
+		actor, err := requestActor(c, deps)
+		if err != nil {
+			return writeAuthorizationError(c, err)
+		}
+		var denied error
+		for _, permission := range permissions {
+			if err := authz.RequirePermission(actor, permission); err == nil {
+				recordSupportLeaseAuthorization(c, deps, actor, permission, authz.AuditDecisionAuthorized, "")
+				return c.Next()
+			} else {
+				denied = err
+			}
+		}
+		recordSupportLeaseAuthorization(c, deps, actor, permissions[0], authz.AuditDecisionDenied, denied.Error())
+		return writeAuthorizationError(c, denied)
+	}
+}
+
 func requireTenantAdministrator(deps Dependencies) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		if deps.DisableRouteAuthorization {
@@ -220,6 +245,34 @@ func requireTenantAdministrator(deps Dependencies) fiber.Handler {
 			if roleCode == string(authz.RoleTenantAdmin) {
 				return c.Next()
 			}
+		}
+		return writeAuthorizationError(c, authz.ErrForbidden)
+	}
+}
+
+// requireTenantAdministratorOrSelfPerson lets a Tenant Administrator act on any
+// person, and lets a person act on their own record when the actor holds the
+// self permission for that person (for example a collaborator managing their own
+// photo). Anyone else is denied.
+func requireTenantAdministratorOrSelfPerson(deps Dependencies, selfPermission authz.Permission, personIDParam string) fiber.Handler {
+	return func(c fiber.Ctx) error {
+		if deps.DisableRouteAuthorization {
+			return c.Next()
+		}
+
+		actor, err := requestActor(c, deps)
+		if err != nil {
+			return writeAuthorizationError(c, err)
+		}
+		if actor.Scope == authz.ActorScopeTenant && strings.TrimSpace(actor.TenantID) != "" && actor.TenantID != authz.GlobalTenantScope {
+			for _, roleCode := range actor.RoleCodes {
+				if roleCode == string(authz.RoleTenantAdmin) {
+					return c.Next()
+				}
+			}
+		}
+		if actor.HasIntrinsicPermission(selfPermission) && actor.PersonID != "" && actor.PersonID == c.Params(personIDParam) {
+			return c.Next()
 		}
 		return writeAuthorizationError(c, authz.ErrForbidden)
 	}

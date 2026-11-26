@@ -1,3 +1,4 @@
+import { PermissionGatedLink } from "../../components/layout/PermissionGatedLink";
 import { useMemo, useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { ApiError } from "../../api/client";
@@ -477,9 +478,9 @@ export function CreateCollaboratorPage() {
                   <p className="mt-1">
                     {t("collaborators.noEligibleHelp")}
                   </p>
-                  <Link className="mt-2 inline-block underline" to="/people">
+                  <PermissionGatedLink className="mt-2 inline-block underline" to="/people">
                     {t("collaborators.goPeople")}
-                  </Link>
+                  </PermissionGatedLink>
                 </div>
               )}
 

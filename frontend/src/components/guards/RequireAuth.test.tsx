@@ -86,7 +86,7 @@ describe("RequireAuth", () => {
     expect(revalidateAuthSession).toHaveBeenCalledTimes(0);
   });
 
-  it("keeps the mounted page while a focus revalidation is pending", async () => {
+  it("silently revalidates on focus without flashing over a mounted form", async () => {
     renderGuard("/admin/authentication");
 
     await waitFor(() => container.textContent?.includes("Mounted 1") === true);
@@ -107,8 +107,16 @@ describe("RequireAuth", () => {
 
     expect(revalidateAuthSession).toHaveBeenCalledTimes(1);
     expect(container.textContent).toContain("Mounted 1");
-    expect(container.textContent).toContain("Verifying your session");
+    expect(container.textContent).not.toContain("Verifying your session");
+    expect(container.querySelector('[role="status"]')).toBeNull();
     expect(mountCount).toBe(1);
+
+    const draft = container.querySelector<HTMLInputElement>('input[aria-label="Draft notes"]');
+    expect(draft?.value).toBe("Keep this draft");
+    await act(async () => {
+      draft?.focus();
+    });
+    expect(document.activeElement).toBe(draft);
 
     await act(async () => {
       resolveFocusValidation?.(authenticatedState);
@@ -117,6 +125,8 @@ describe("RequireAuth", () => {
 
     expect(container.textContent).toContain("Mounted 1");
     expect(container.textContent).not.toContain("Verifying your session");
+    expect(draft?.value).toBe("Keep this draft");
+    expect(document.activeElement).toBe(draft);
     expect(mountCount).toBe(1);
   });
 
@@ -181,6 +191,7 @@ function StatefulPage() {
         Location {location.pathname}
         {location.search}
       </p>
+      <input aria-label="Draft notes" defaultValue="Keep this draft" />
       <button
         type="button"
         onClick={() =>
