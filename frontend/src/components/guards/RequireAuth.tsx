@@ -19,7 +19,6 @@ export function RequireAuth({ children }: { children: ReactNode }) {
   // protected application shell.
   const validationKey = `${accountId}:${location.pathname}`;
   const [validatedKey, setValidatedKey] = useState("");
-  const [backgroundValidation, setBackgroundValidation] = useState(false);
   const validatedAccountRef = useRef("");
   const lastValidationKeyRef = useRef("");
 
@@ -28,21 +27,16 @@ export function RequireAuth({ children }: { children: ReactNode }) {
     const expectedAccountId = accountId;
     if (suspendPage) {
       setValidatedKey("");
-    } else {
-      setBackgroundValidation(true);
     }
-    try {
-      const next = await revalidateAuthSession();
-      if (
-        next.status === "authenticated" &&
-        next.session.accountId === expectedAccountId
-      ) {
-        setValidatedKey(validationKey);
-      }
-    } finally {
-      if (!suspendPage) {
-        setBackgroundValidation(false);
-      }
+    // A background focus check must not cover the screen or steal field
+    // clicks. The backend still authorizes every request; authStore changes
+    // to anonymous/error if this verification discovers an invalid session.
+    const next = await revalidateAuthSession();
+    if (
+      next.status === "authenticated" &&
+      next.session.accountId === expectedAccountId
+    ) {
+      setValidatedKey(validationKey);
     }
   }, [accountId, validationKey]);
 
@@ -77,12 +71,11 @@ export function RequireAuth({ children }: { children: ReactNode }) {
   useEffect(() => {
     const validate = () => {
       if (document.visibilityState === "visible") {
-        // Focus/visibility checks preserve the mounted page so partially
-        // completed forms are not discarded merely because the user copied
-        // information from another window. A blocking overlay prevents use of
-        // the protected page until the server confirms the session. If the
-        // session is no longer valid, revalidateAuthSession updates the auth
-        // store and this guard immediately redirects to login.
+        // Focus/visibility checks remain active, but run without a full-screen
+        // overlay. The overlay flashed on window refocus (including clicks
+        // returning from other windows) and intercepted the user's first
+        // form-field interaction. Invalid sessions still redirect via authStore;
+        // the backend remains authoritative for every protected request.
         void validateCurrentSession(false);
       }
     };
@@ -139,17 +132,5 @@ export function RequireAuth({ children }: { children: ReactNode }) {
   ) {
     return <Navigate to="/password/change" replace />;
   }
-  return (
-    <>
-      {children}
-      {backgroundValidation && (
-        <div
-          role="status"
-          className="fixed inset-0 z-[100] grid place-items-center bg-white/70 text-slate-700 backdrop-blur-sm"
-        >
-          {t("guard.verifying.your.session_8e9611")}
-        </div>
-      )}
-    </>
-  );
+  return <>{children}</>;
 }
