@@ -1,6 +1,7 @@
 package authentication
 
 import (
+	"encoding/json"
 	"errors"
 	"net"
 	"strings"
@@ -270,6 +271,57 @@ func (h *Handler) SetAccountActive(c fiber.Ctx) error {
 	return httpx.OK(c, account)
 }
 
+// ChangeAccountLogin is global-control-plane only; route middleware must have
+// checked PermissionAuthzManage in GLOBAL context (never a support lease).
+func (h *Handler) ChangeAccountLogin(c fiber.Ctx) error {
+	session, err := h.currentSession(c)
+	if err != nil {
+		return h.writeError(c, err)
+	}
+	accountID := strings.TrimSpace(c.Params("id"))
+	if accountID == session.AccountID {
+		return c.Status(fiber.StatusForbidden).JSON(httpx.APIResponse{Error: &httpx.APIError{
+			Code: "self_login_change_forbidden", Message: "An administrator cannot change their own Authentication Account login",
+		}})
+	}
+	actor, err := authz.ResolveRequestActor(c, h.actorStore)
+	if err != nil || actor == nil || actor.Scope != authz.ActorScopeApplication || actor.TenantID != authz.GlobalTenantScope || actor.SupportLeaseID != "" || !actor.HasPermission(authz.PermissionAuthzManage) {
+		return c.Status(fiber.StatusForbidden).JSON(httpx.APIResponse{Error: &httpx.APIError{
+			Code: "forbidden", Message: "Global Application Administrator authorization is required",
+		}})
+	}
+	var req ChangeAccountLoginRequest
+	if err := c.Bind().Body(&req); err != nil {
+		return httpx.BadRequest(c, "invalid_body", "Invalid request body")
+	}
+	metadata, err := json.Marshal(map[string]any{
+		"oldLogin":          normalizeLogin(req.ExpectedLogin),
+		"newLogin":          normalizeLogin(req.NewLogin),
+		"updatePersonEmail": req.UpdatePersonEmail,
+	})
+	if err != nil {
+		return h.writeError(c, err)
+	}
+	audit := authz.AuthorizationAuditEntry{
+		Actor: actor, AccountID: session.AccountID,
+		TenantID:   authz.GlobalTenantScope,
+		Permission: authz.PermissionAuthzManage,
+		Operation:  "authentication.accounts.login.change",
+		TargetType: "auth_user_account", TargetID: accountID,
+		Decision:      authz.AuditDecisionAuthorized,
+		CorrelationID: authz.RequestCorrelationID(c),
+		RequestMethod: c.Method(), RequestPath: c.Path(),
+		MetadataJSON: string(metadata),
+		Reason:       strings.TrimSpace(req.Reason),
+	}
+	result, err := h.service.ChangeAccountLogin(c.Context(), accountID, req, audit)
+	if err != nil {
+		return h.writeError(c, err)
+	}
+	setNoStore(c)
+	return httpx.OK(c, result)
+}
+
 func (h *Handler) IssuePasswordResetToken(c fiber.Ctx) error {
 	result, err := h.service.IssuePasswordResetToken(c.Context(), c.Params("id"))
 	if err != nil {
@@ -423,6 +475,12 @@ func (h *Handler) writeError(c fiber.Ctx, err error) error {
 		setNoStore(c)
 		h.clearSessionCookie(c)
 		return c.Status(fiber.StatusUnauthorized).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "actor_inactive", Message: "The authorization actor is inactive"}})
+	case errors.Is(err, ErrLoginStale):
+		return c.Status(fiber.StatusConflict).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "login_changed", Message: "The login has changed; reload the account and try again"}})
+	case errors.Is(err, ErrLoginPersonEmailConflict):
+		return c.Status(fiber.StatusConflict).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "person_email_exists", Message: "The login matches another Person's contact email"}})
+	case errors.Is(err, ErrLoginPersonEmailMismatch):
+		return c.Status(fiber.StatusConflict).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "person_email_changed", Message: "The Person email is no longer the original login; correct it separately or clear the update checkbox"}})
 	case errors.Is(err, ErrLoginAlreadyExists):
 		return c.Status(fiber.StatusConflict).JSON(httpx.APIResponse{Error: &httpx.APIError{Code: "login_exists", Message: "An authentication account already uses this login"}})
 	case errors.Is(err, ErrActorAlreadyLinked):
