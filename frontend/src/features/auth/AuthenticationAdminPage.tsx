@@ -866,7 +866,7 @@ export function AuthenticationAdminPage() {
                   <p className="text-sm text-slate-600">
                     {t("admin.authentication.changeLogin.help")}
                   </p>
-                  {loginChangeError && (
+                  {Boolean(loginChangeError) && (
                     <div role="alert">
                       {loginServerErrorKey
                         ? <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-900">{t(loginServerErrorKey)}</p>
