@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { ApiError } from "../../api/client";
+import { translateForLocale } from "../../i18n";
 import type { AuthzActor } from "../../types/authz";
 import type { AuthAccount } from "../../types/auth";
 import type { Collaborator } from "../../types/collaborators";
@@ -18,7 +20,10 @@ import {
   authenticationCollaboratorStatusLabel,
   canCreateAuthenticationAccountForCollaborator,
   canIssuePasswordResetToken,
+  canOfferPersonEmailLoginCorrection,
   isAuthenticationActorEligible,
+  loginChangeValidation,
+  loginChangeServerErrorKey,
 } from "./AuthenticationAdminPage";
 
 const actor: AuthzActor = {
@@ -450,5 +455,77 @@ describe("authentication account actor/account filter", () => {
         active: true,
       }),
     ).toBe("Application-wide");
+  });
+});
+
+describe("login change Person contact email opt-in", () => {
+  const account: AuthAccount = {
+    id: "account-1", actorId: "actor-1", actorKey: "actor-1", displayName: "Person",
+    login: "raining.csat.a@example.com", globalPersonId: "person-1",
+    globalPersonEmail: "raining.csat.a@example.com", active: true, actorActive: true,
+    mustChangePassword: false, createdAt: "2026-11-26T00:00:00Z", updatedAt: "2026-11-26T00:00:00Z",
+  };
+  it("offers contact correction only when the bound Person email still matches the old login", () => {
+    expect(canOfferPersonEmailLoginCorrection(account)).toBe(true);
+    expect(canOfferPersonEmailLoginCorrection({ ...account, globalPersonEmail: "other@example.com" })).toBe(false);
+    expect(canOfferPersonEmailLoginCorrection({ ...account, globalPersonId: undefined })).toBe(false);
+    expect(canOfferPersonEmailLoginCorrection({ ...account, globalPersonEmail: undefined })).toBe(false);
+  });
+});
+
+
+describe("LC-02 login-change visible validation feedback", () => {
+  const oldLogin = "raining.csat.a@example.com";
+  const corrected = "training.csat.a@example.com";
+  const reason = "Correct the typo in the training login";
+
+  it("explains missing fields instead of silently disabling Save", () => {
+    const state = loginChangeValidation(oldLogin, "", "", "");
+    expect(state.canSubmit).toBe(false);
+    expect(translateForLocale("en-US", state.newLogin!)).toContain("Enter the new login");
+    expect(translateForLocale("en-US", state.confirmation!)).toContain("Repeat the new email");
+    expect(translateForLocale("en-US", state.reason!)).toContain("Enter a reason");
+  });
+
+  it("explains mismatch, identical email, invalid email, and short reason", () => {
+    const mismatched = loginChangeValidation(oldLogin, corrected, "other@example.com", reason);
+    expect(mismatched.canSubmit).toBe(false);
+    expect(mismatched.confirmation).toBe("admin.authentication.changeLogin.validation.mismatch");
+    const unchanged = loginChangeValidation(oldLogin, oldLogin, oldLogin, reason);
+    expect(unchanged.newLogin).toBe("admin.authentication.changeLogin.validation.unchanged");
+    const invalid = loginChangeValidation(oldLogin, "not-an-email", "not-an-email", reason);
+    expect(invalid.newLogin).toBe("admin.authentication.changeLogin.validation.emailInvalid");
+    const tooShort = loginChangeValidation(oldLogin, corrected, corrected, "short");
+    expect(tooShort.reason).toBe("admin.authentication.changeLogin.validation.reasonLength");
+    const blank = loginChangeValidation(oldLogin, corrected, corrected, "   ");
+    expect(blank.reason).toBe("admin.authentication.changeLogin.validation.reasonRequired");
+  });
+
+  it("becomes valid only when the correction and reason are complete", () => {
+    expect(loginChangeValidation(oldLogin, corrected, corrected, reason)).toEqual({
+      newLogin: null,
+      confirmation: null,
+      reason: null,
+      canSubmit: true,
+    });
+    expect(loginChangeValidation(oldLogin, corrected.toUpperCase(), corrected, reason).canSubmit).toBe(true);
+  });
+
+  it("supplies a localized in-form explanation for server conflicts and unauthorized attempts", () => {
+    const errors = [
+      ["login_exists", "loginExists"],
+      ["person_email_exists", "personEmailExists"],
+      ["person_email_changed", "personEmailChanged"],
+      ["login_changed", "loginChanged"],
+      ["self_login_change_forbidden", "selfForbidden"],
+      ["forbidden", "notAuthorized"],
+    ];
+    for (const [code, suffix] of errors) {
+      const key = loginChangeServerErrorKey(new ApiError({ message: "Rejected", status: 403, code }));
+      expect(key).toContain(suffix);
+      expect(translateForLocale("en-US", key!)).not.toBe(key);
+      expect(translateForLocale("pt-BR", key!)).not.toBe(key);
+    }
+    expect(loginChangeServerErrorKey(new Error("Temporary network failure"))).toBeNull();
   });
 });

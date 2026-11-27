@@ -5,6 +5,7 @@ import type {
   AuthSelfServiceHome,
   AuthTenantOption,
   ChangePasswordRequest,
+  ChangeAuthAccountLoginRequest,
   CreateAuthAccountRequest,
   LoginRequest,
   PasswordResetResult,
@@ -140,6 +141,19 @@ export async function resetPassword(
   });
   clearLocalSessionTransport();
   return result;
+}
+
+export function changeAuthAccountLogin(
+  accountId: string,
+  request: ChangeAuthAccountLoginRequest,
+): Promise<AuthAccount> {
+  return apiFetch<AuthAccount>(`/auth/accounts/${encodeURIComponent(accountId)}/login`, {
+    method: "PATCH",
+    body: JSON.stringify(request),
+    // A revoked authorization is explained inline at the attempted operation;
+    // the server still denies it. Do not navigate away before showing the error.
+    suppressForbiddenNavigation: true,
+  });
 }
 
 export async function listAuthAccounts(): Promise<AuthAccount[]> {
