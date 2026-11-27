@@ -2,6 +2,8 @@ package authentication
 
 import (
 	"context"
+
+	"enterpriseremotesystems/backend/internal/authz"
 	"time"
 )
 
@@ -127,6 +129,7 @@ type Repository interface {
 	FindAccountByLogin(ctx context.Context, login string) (AccountRecord, error)
 	CreatePersonAccount(ctx context.Context, tenantID string, personID string, account Account) (AccountRecord, error)
 	SetAccountActive(ctx context.Context, id string, active bool, now time.Time) (AccountRecord, error)
+	ChangeAccountLogin(ctx context.Context, accountID string, req ChangeAccountLoginRequest, audit authz.AuthorizationAuditEntry, now time.Time) (AccountRecord, error)
 	UpdateLastLogin(ctx context.Context, id string, now time.Time) error
 	UpdatePasswordAndRevokeSessions(ctx context.Context, id string, passwordHash string, mustChangePassword bool, now time.Time) error
 	CreateSession(ctx context.Context, session Session) error

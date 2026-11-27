@@ -28,6 +28,15 @@ type SetAccountActiveRequest struct {
 	Active *bool `json:"active"`
 }
 
+// ExpectedLogin protects against applying a correction to a stale account view.
+// Contact email change is strictly opt-in, never inferred from login change.
+type ChangeAccountLoginRequest struct {
+	ExpectedLogin     string `json:"expectedLogin"`
+	NewLogin          string `json:"newLogin"`
+	UpdatePersonEmail bool   `json:"updatePersonEmail"`
+	Reason            string `json:"reason"`
+}
+
 type AccountActorResponse struct {
 	ActorID        string `json:"actorId"`
 	ActorKey       string `json:"actorKey"`

@@ -3,6 +3,7 @@ import { useLocation } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createAuthAccount,
+  changeAuthAccountLogin,
   issuePasswordResetToken,
   listAuthAccounts,
   setAuthAccountActive,
@@ -10,13 +11,14 @@ import {
 import { listTenants } from "../../api/tenants.api";
 import { useAuthState } from "../../app/useAuth";
 import { ApiErrorPanel } from "../../components/ApiErrorPanel";
+import { ApiError } from "../../api/client";
 import type { AuthAccount, AuthAccountActor } from "../../types/auth";
 import type { AuthzActor, AuthzActorRoleGrant } from "../../types/authz";
 import type { Collaborator } from "../../types/collaborators";
 import type { Person } from "../../types/people";
 import { ReactivationRequestsPanel } from "./ReactivationRequestsPanel";
 import { PageTitle } from "../../components/layout/PageHeading";
-import { translateEnglish, useI18n, type Translate } from "../../i18n";
+import { translateEnglish, useI18n, type Translate, type TranslationKey } from "../../i18n";
 
 export function activeAuthenticationGrants(
   actor: AuthzActor,
@@ -35,6 +37,71 @@ export function authenticationActorOptionLabel(actor: AuthzActor): string {
     .map((grant) => `${grant.roleCode} @ ${grant.tenantId}`)
     .join(", ");
   return `${actor.displayName} (${actor.actorKey}) — ${access}`;
+}
+
+export function canOfferPersonEmailLoginCorrection(account: AuthAccount): boolean {
+  return Boolean(
+    account.globalPersonId &&
+    account.globalPersonEmail?.trim().toLowerCase() === account.login.trim().toLowerCase(),
+  );
+}
+
+/** Explain every reason Save is unavailable while preserving server-side checks. */
+export function loginChangeValidation(
+  originalLogin: string,
+  enteredLogin: string,
+  enteredConfirmation: string,
+  enteredReason: string,
+): {
+  newLogin: TranslationKey | null;
+  confirmation: TranslationKey | null;
+  reason: TranslationKey | null;
+  canSubmit: boolean;
+} {
+  const original = originalLogin.trim().toLowerCase();
+  const next = enteredLogin.trim().toLowerCase();
+  const confirmation = enteredConfirmation.trim().toLowerCase();
+  const reason = enteredReason.trim();
+  const reasonBytes = new TextEncoder().encode(reason).length;
+
+  const newLogin: TranslationKey | null = !next
+    ? "admin.authentication.changeLogin.validation.newRequired"
+    : next.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(next)
+      ? "admin.authentication.changeLogin.validation.emailInvalid"
+      : next === original
+        ? "admin.authentication.changeLogin.validation.unchanged"
+        : null;
+  const confirmationIssue: TranslationKey | null = !confirmation
+    ? "admin.authentication.changeLogin.validation.confirmRequired"
+    : confirmation !== next
+      ? "admin.authentication.changeLogin.validation.mismatch"
+      : null;
+  const reasonIssue: TranslationKey | null = !reason
+    ? "admin.authentication.changeLogin.validation.reasonRequired"
+    : reasonBytes < 10 || reasonBytes > 500
+      ? "admin.authentication.changeLogin.validation.reasonLength"
+      : null;
+
+  return {
+    newLogin,
+    confirmation: confirmationIssue,
+    reason: reasonIssue,
+    canSubmit: !newLogin && !confirmationIssue && !reasonIssue,
+  };
+}
+
+/** Translate known API rejections alongside the editor rather than at page top. */
+export function loginChangeServerErrorKey(error: unknown): TranslationKey | null {
+  if (!(error instanceof ApiError)) return null;
+  switch (error.code) {
+    case "login_exists": return "admin.authentication.changeLogin.error.loginExists";
+    case "person_email_exists": return "admin.authentication.changeLogin.error.personEmailExists";
+    case "person_email_changed": return "admin.authentication.changeLogin.error.personEmailChanged";
+    case "login_changed": return "admin.authentication.changeLogin.error.loginChanged";
+    case "self_login_change_forbidden": return "admin.authentication.changeLogin.selfForbidden";
+    case "forbidden": return "admin.authentication.changeLogin.error.notAuthorized";
+    default: return null;
+  }
 }
 
 export function canIssuePasswordResetToken(account: AuthAccount): boolean {
@@ -306,6 +373,13 @@ export function AuthenticationAdminPage() {
   const [actorLookupSearch, setActorLookupSearch] = useState("");
   const [actionError, setActionError] = useState<unknown>(null);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
+  const [editingLoginAccountId, setEditingLoginAccountId] = useState<string | null>(null);
+  const [newAccountLogin, setNewAccountLogin] = useState("");
+  const [confirmAccountLogin, setConfirmAccountLogin] = useState("");
+  const [loginChangeReason, setLoginChangeReason] = useState("");
+  const [updatePersonEmail, setUpdatePersonEmail] = useState(false);
+  const [loginChangeSuccess, setLoginChangeSuccess] = useState("");
+  const [loginChangeError, setLoginChangeError] = useState<unknown>(null);
   const [resetToken, setResetToken] = useState<{
     accountId: string;
     login: string;
@@ -329,6 +403,38 @@ export function AuthenticationAdminPage() {
       authenticationAccountMatchesSearch(account, search),
     );
   }, [accounts.data, actorLookupSearch]);
+
+  function closeLoginEditor() {
+    setEditingLoginAccountId(null);
+    setNewAccountLogin("");
+    setConfirmAccountLogin("");
+    setLoginChangeReason("");
+    setUpdatePersonEmail(false);
+    setLoginChangeError(null);
+  }
+
+  async function saveLogin(account: AuthAccount) {
+    setActionError(null);
+    setLoginChangeSuccess("");
+    setLoginChangeError(null);
+    setPendingAction(`login:${account.id}`);
+    try {
+      const updated = await changeAuthAccountLogin(account.id, {
+        expectedLogin: account.login,
+        newLogin: newAccountLogin,
+        updatePersonEmail,
+        reason: loginChangeReason,
+      });
+      closeLoginEditor();
+      setActorLookupSearch("");
+      setLoginChangeSuccess(t("admin.authentication.changeLogin.success", { login: updated.login }));
+      void queryClient.invalidateQueries({ queryKey: ["auth", "accounts"] });
+    } catch (error) {
+      setLoginChangeError(error);
+    } finally {
+      setPendingAction(null);
+    }
+  }
 
   async function toggle(accountId: string, active: boolean) {
     setActionError(null);
@@ -375,6 +481,12 @@ export function AuthenticationAdminPage() {
         error={accounts.error ?? tenants.error ?? mutation.error ?? actionError}
         translate={t}
       />
+
+      {loginChangeSuccess && (
+        <p role="status" className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
+          {loginChangeSuccess}
+        </p>
+      )}
 
       <ReactivationRequestsPanel
         defaultOpen={location.hash === "#account-reactivation-requests"}
@@ -512,6 +624,8 @@ export function AuthenticationAdminPage() {
           const resetEligible = canIssuePasswordResetToken(account);
           const isCurrentAccount =
             auth.status === "authenticated" && account.id === auth.session.accountId;
+          const loginValidation = loginChangeValidation(account.login, newAccountLogin, confirmAccountLogin, loginChangeReason);
+          const loginServerErrorKey = loginChangeServerErrorKey(loginChangeError);
           const personName =
             account.globalPersonName?.trim() ||
             account.actors?.find((actor) => actor.personName?.trim())?.personName ||
@@ -688,6 +802,29 @@ export function AuthenticationAdminPage() {
                 <div className="flex flex-wrap gap-2">
                   <button
                     className="rounded border px-2 py-1 text-sm disabled:opacity-50"
+                    disabled={isCurrentAccount || pendingAction !== null}
+                    title={isCurrentAccount ? t("admin.authentication.changeLogin.selfForbidden") : undefined}
+                    onClick={() => {
+                      setActionError(null);
+                      setLoginChangeSuccess("");
+                      setLoginChangeError(null);
+                      if (editingLoginAccountId === account.id) {
+                        closeLoginEditor();
+                      } else {
+                        setEditingLoginAccountId(account.id);
+                        setNewAccountLogin("");
+                        setConfirmAccountLogin("");
+                        setLoginChangeReason("");
+                        setUpdatePersonEmail(false);
+                      }
+                    }}
+                  >
+                    {editingLoginAccountId === account.id
+                      ? t("admin.authentication.changeLogin.cancel")
+                      : t("admin.authentication.changeLogin.open")}
+                  </button>
+                  <button
+                    className="rounded border px-2 py-1 text-sm disabled:opacity-50"
                     disabled={isCurrentAccount || activePending || pendingAction !== null}
                     title={isCurrentAccount ? t("admin.authentication.action.selfSuspendTitle") : undefined}
                     onClick={() => void toggle(account.id, Boolean(account.securitySuspended))}
@@ -712,6 +849,107 @@ export function AuthenticationAdminPage() {
                   </button>
                 </div>
               </footer>
+              {isCurrentAccount && (
+                <p className="border-t px-5 py-2 text-sm text-amber-800" role="status">
+                  {t("admin.authentication.changeLogin.selfForbidden")}
+                </p>
+              )}
+              {editingLoginAccountId === account.id && (
+                <form
+                  className="grid gap-3 border-t bg-slate-50 p-5"
+                  onSubmit={(event) => { event.preventDefault(); void saveLogin(account); }}
+                  aria-label={t("admin.authentication.changeLogin.title", { login: account.login })}
+                >
+                  <p className="text-sm font-semibold text-slate-900">
+                    {t("admin.authentication.changeLogin.title", { login: account.login })}
+                  </p>
+                  <p className="text-sm text-slate-600">
+                    {t("admin.authentication.changeLogin.help")}
+                  </p>
+                  {Boolean(loginChangeError) && (
+                    <div role="alert">
+                      {loginServerErrorKey
+                        ? <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-900">{t(loginServerErrorKey)}</p>
+                        : <ApiErrorPanel error={loginChangeError} translate={t} />}
+                    </div>
+                  )}
+                  <label className="block text-sm font-medium">
+                    {t("admin.authentication.changeLogin.newLogin")}
+                    <input
+                      type="email" required maxLength={254} autoComplete="off"
+                      className="mt-1 block w-full rounded-lg border bg-white px-3 py-2"
+                      value={newAccountLogin}
+                      aria-invalid={Boolean(newAccountLogin.trim() && loginValidation.newLogin)}
+                      aria-describedby={loginValidation.newLogin ? `login-change-new-${account.id}` : undefined}
+                      onChange={(event) => { setNewAccountLogin(event.target.value); setLoginChangeError(null); }}
+                      disabled={pendingAction !== null}
+                    />
+                    {loginValidation.newLogin && (
+                      <span id={`login-change-new-${account.id}`} aria-live="polite" className="mt-1 block text-xs text-amber-800">{t(loginValidation.newLogin)}</span>
+                    )}
+                  </label>
+                  <label className="block text-sm font-medium">
+                    {t("admin.authentication.changeLogin.confirmLogin")}
+                    <input
+                      type="email" required maxLength={254} autoComplete="off"
+                      className="mt-1 block w-full rounded-lg border bg-white px-3 py-2"
+                      value={confirmAccountLogin}
+                      aria-invalid={Boolean(confirmAccountLogin.trim() && loginValidation.confirmation)}
+                      aria-describedby={loginValidation.confirmation ? `login-change-confirm-${account.id}` : undefined}
+                      onChange={(event) => { setConfirmAccountLogin(event.target.value); setLoginChangeError(null); }}
+                      disabled={pendingAction !== null}
+                    />
+                    {loginValidation.confirmation && (
+                      <span id={`login-change-confirm-${account.id}`} aria-live="polite" className="mt-1 block text-xs text-amber-800">{t(loginValidation.confirmation)}</span>
+                    )}
+                  </label>
+                  <label className="block text-sm font-medium">
+                    {t("admin.authentication.changeLogin.reason")}
+                    <textarea required minLength={10} maxLength={500} rows={2}
+                      className="mt-1 block w-full rounded-lg border bg-white px-3 py-2"
+                      value={loginChangeReason}
+                      aria-invalid={Boolean(loginChangeReason.trim() && loginValidation.reason)}
+                      aria-describedby={loginValidation.reason ? `login-change-reason-${account.id}` : undefined}
+                      onChange={(event) => { setLoginChangeReason(event.target.value); setLoginChangeError(null); }}
+                      disabled={pendingAction !== null}
+                    />
+                    {loginValidation.reason && (
+                      <span id={`login-change-reason-${account.id}`} aria-live="polite" className="mt-1 block text-xs text-amber-800">{t(loginValidation.reason)}</span>
+                    )}
+                  </label>
+                  {canOfferPersonEmailLoginCorrection(account) ? (
+                    <label className="flex items-start gap-2 text-sm text-slate-800">
+                      <input
+                        type="checkbox" className="mt-1"
+                        checked={updatePersonEmail}
+                        onChange={(event) => setUpdatePersonEmail(event.target.checked)}
+                        disabled={pendingAction !== null}
+                      />
+                      {t("admin.authentication.changeLogin.updatePersonEmail", { email: account.globalPersonEmail ?? "" })}
+                    </label>
+                  ) : account.globalPersonId ? (
+                    <p className="text-sm text-amber-800">
+                      {t("admin.authentication.changeLogin.personEmailDifferent")}
+                    </p>
+                  ) : null}
+                  <p className="text-sm text-slate-600">
+                    {t("admin.authentication.changeLogin.sessionWarning")}
+                  </p>
+                  <div className="flex gap-2">
+                    <button type="submit"
+                      className="rounded bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                      disabled={pendingAction !== null || !loginValidation.canSubmit}
+                    >
+                      {pendingAction === `login:${account.id}` ? t("common.saving") : t("admin.authentication.changeLogin.save")}
+                    </button>
+                    <button type="button" className="rounded border px-3 py-2 text-sm"
+                      onClick={closeLoginEditor} disabled={pendingAction !== null}
+                    >
+                      {t("admin.authentication.changeLogin.cancel")}
+                    </button>
+                  </div>
+                </form>
+              )}
             </article>
           );
         })}

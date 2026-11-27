@@ -118,6 +118,13 @@ export type ResetPasswordRequest = {
   newPassword: string;
 };
 
+export type ChangeAuthAccountLoginRequest = {
+  expectedLogin: string;
+  newLogin: string;
+  updatePersonEmail: boolean;
+  reason: string;
+};
+
 export type CreateAuthAccountRequest = {
   tenantId?: string;
   login: string;
