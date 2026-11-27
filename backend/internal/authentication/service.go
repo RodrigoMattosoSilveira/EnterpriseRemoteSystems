@@ -2,6 +2,8 @@ package authentication
 
 import (
 	"context"
+
+	"enterpriseremotesystems/backend/internal/authz"
 	"io"
 	"time"
 )
@@ -17,6 +19,7 @@ type Service interface {
 	GetAccount(ctx context.Context, id string) (AccountResponse, error)
 	CreateAccount(ctx context.Context, req CreateAccountRequest) (AccountResponse, error)
 	SetAccountActive(ctx context.Context, id string, active bool) (AccountResponse, error)
+	ChangeAccountLogin(ctx context.Context, id string, req ChangeAccountLoginRequest, audit authz.AuthorizationAuditEntry) (AccountResponse, error)
 	IssuePasswordResetToken(ctx context.Context, accountID string) (PasswordResetTokenResponse, error)
 	IssueTenantPersonPasswordResetToken(ctx context.Context, tenantID string, personID string) (PasswordResetTokenResponse, error)
 	GetPersonAuthenticationStatus(ctx context.Context, tenantID string, personID string) (PersonAuthenticationStatusResponse, error)

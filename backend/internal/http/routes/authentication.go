@@ -31,6 +31,7 @@ func RegisterAuthenticationAdministrationRoutes(router fiber.Router, deps Depend
 	r.Get("/accounts", requireApplicationPermission(deps, authz.PermissionAuthzRead), deps.AuthenticationHandler.ListAccounts)
 	r.Post("/accounts", requireApplicationPermission(deps, authz.PermissionAuthzManage), deps.AuthenticationHandler.CreateAccount)
 	r.Patch("/accounts/:id/active", requireApplicationPermission(deps, authz.PermissionAuthzManage), deps.AuthenticationHandler.SetAccountActive)
+	r.Patch("/accounts/:id/login", requireApplicationPermission(deps, authz.PermissionAuthzManage), deps.AuthenticationHandler.ChangeAccountLogin)
 	r.Post("/accounts/:id/password-reset-tokens", requireApplicationPermission(deps, authz.PermissionAuthzManage), deps.AuthenticationHandler.IssuePasswordResetToken)
 	r.Get("/reactivation-requests", requireApplicationPermission(deps, authz.PermissionAuthzRead), deps.AuthenticationHandler.ListReactivationRequests)
 	r.Post("/reactivation-requests/:id/decision", requireApplicationPermission(deps, authz.PermissionAuthzManage), deps.AuthenticationHandler.ReviewReactivationRequest)

@@ -627,3 +627,64 @@ func TestAuthenticationHandlerListsGrantedTenantOptions(t *testing.T) {
 		t.Fatalf("unexpected tenant options: %#v", payload.Data)
 	}
 }
+
+func TestAuthenticationHandlerChangeLoginRequiresGlobalAdminAndForbidsSelfChange(t *testing.T) {
+	database, _, service, _ := authenticationTestService(t)
+	oldLogin := "handler-change-login@example.com"
+	ensureAuthenticationTestPerson(t, database, oldLogin)
+	account, err := service.CreateAccount(t.Context(), CreateAccountRequest{
+		TenantID: appdb.DefaultTenantID, Login: oldLogin, TemporaryPassword: "Handler-Change-Password-1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(service, CookieConfig{}, nil, nil)
+	for _, scenario := range []struct {
+		name             string
+		scope            authz.ActorScope
+		tenantID         string
+		supportLease     string
+		permission       bool
+		sessionAccountID string
+		expectedStatus   int
+	}{
+		{"tenant administrator", authz.ActorScopeTenant, appdb.DefaultTenantID, "", true, "other-admin", http.StatusForbidden},
+		{"support lease", authz.ActorScopeApplication, appdb.DefaultTenantID, "lease-1", true, "other-admin", http.StatusForbidden},
+		{"no permission", authz.ActorScopeApplication, authz.GlobalTenantScope, "", false, "other-admin", http.StatusForbidden},
+		{"self login change", authz.ActorScopeApplication, authz.GlobalTenantScope, "", true, account.ID, http.StatusForbidden},
+		{"global administrator", authz.ActorScopeApplication, authz.GlobalTenantScope, "", true, "other-admin", http.StatusOK},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			app := fiber.New()
+			app.Use(func(c fiber.Ctx) error {
+				SetSessionContext(c, SessionResponse{AccountID: scenario.sessionAccountID})
+				permissions := map[authz.Permission]struct{}{}
+				if scenario.permission {
+					permissions[authz.PermissionAuthzManage] = struct{}{}
+				}
+				authz.SetRequestActor(c, &authz.Actor{
+					ID: "global-administrator-actor", RecordID: "global-admin-record", AccountID: scenario.sessionAccountID,
+					Scope: scenario.scope, TenantID: scenario.tenantID, SupportLeaseID: scenario.supportLease,
+					Permissions: permissions,
+				})
+				return c.Next()
+			})
+			app.Patch("/accounts/:id/login", handler.ChangeAccountLogin)
+			payload, _ := json.Marshal(ChangeAccountLoginRequest{ExpectedLogin: oldLogin, NewLogin: "handler-fixed@example.com", UpdatePersonEmail: true, Reason: "Approved correction of login typo"})
+			request := httptest.NewRequest(http.MethodPatch, "/accounts/"+account.ID+"/login", bytes.NewReader(payload))
+			request.Header.Set("Content-Type", "application/json")
+			response, err := app.Test(request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if response.StatusCode != scenario.expectedStatus {
+				body, _ := io.ReadAll(response.Body)
+				t.Fatalf("expected status %d, got %d: %s", scenario.expectedStatus, response.StatusCode, body)
+			}
+		})
+	}
+	changed, err := service.GetAccount(t.Context(), account.ID)
+	if err != nil || changed.Login != "handler-fixed@example.com" {
+		t.Fatalf("expected only authorized change to commit: %+v, %v", changed, err)
+	}
+}
