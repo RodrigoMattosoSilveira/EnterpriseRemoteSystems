@@ -340,7 +340,7 @@ describe("CreateCollaboratorPage", () => {
     );
   });
 
-  it("shows a setup warning and disables submission when a dropdown has no active reference data", async () => {
+  it("shows a setup warning and keeps submission available when a dropdown has no active reference data", async () => {
     mockCreateCollaboratorFetch({
       referenceData: {
         ...referenceRows,
@@ -372,7 +372,7 @@ describe("CreateCollaboratorPage", () => {
     const submit = Array.from(container.querySelectorAll("button")).find(
       (node) => node.textContent?.trim() === "Create Collaborator",
     );
-    expect(submit?.hasAttribute("disabled")).toBe(true);
+    expect(submit?.hasAttribute("disabled")).toBe(false);
   });
 
   it("shows selected complete Person details and a link to the Person", async () => {
@@ -402,20 +402,27 @@ describe("CreateCollaboratorPage", () => {
         "input",
       ),
     ).toBeTruthy();
-    expect(submitButton().hasAttribute("disabled")).toBe(true);
+    expect(submitButton().hasAttribute("disabled")).toBe(false);
   });
 
-  it("requires a complete Person and all required Collaborator fields before enabling submit", async () => {
+  it("shows missing required Collaborator fields only after a submit attempt", async () => {
     mockCreateCollaboratorFetch();
 
     renderCreateCollaboratorPage();
 
     await waitForText("2 eligible");
 
-    expect(submitButton().hasAttribute("disabled")).toBe(true);
+    expect(submitButton().hasAttribute("disabled")).toBe(false);
+    expect(
+      textNode("Complete these fields to enable Create Collaborator:"),
+    ).toBeFalsy();
 
     await selectEligiblePerson("na", "Ana Silva (Ana)");
-    expect(submitButton().hasAttribute("disabled")).toBe(true);
+    expect(
+      textNode("Complete these fields to enable Create Collaborator:"),
+    ).toBeFalsy();
+
+    await clickButton("Create Collaborator");
     await waitForText("Complete these fields to enable Create Collaborator:");
     await waitForText("Select a status");
     await waitForText("Select a sector");
@@ -456,7 +463,7 @@ describe("CreateCollaboratorPage", () => {
     const submit = Array.from(container.querySelectorAll("button")).find(
       (node) => node.textContent?.trim() === "Create Collaborator",
     );
-    expect(submit?.hasAttribute("disabled")).toBe(true);
+    expect(submit?.hasAttribute("disabled")).toBe(false);
   });
 
   it("submits the collaborator create payload and navigates back to the list", async () => {

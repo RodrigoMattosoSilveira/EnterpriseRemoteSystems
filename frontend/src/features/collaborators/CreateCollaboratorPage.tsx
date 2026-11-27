@@ -73,6 +73,7 @@ export function CreateCollaboratorPage() {
   }));
   const [personSearch, setPersonSearch] = useState("");
   const [clientValidationError, setClientValidationError] = useState("");
+  const [submitAttempted, setSubmitAttempted] = useState(false);
 
   const people = useMemo(
     () => (Array.isArray(peopleQuery.data) ? peopleQuery.data : []),
@@ -267,6 +268,7 @@ export function CreateCollaboratorPage() {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setSubmitAttempted(true);
 
     if (!selectedPerson) {
       setClientValidationError(
@@ -367,7 +369,7 @@ export function CreateCollaboratorPage() {
         )}
 
         {!isLoading && !loadError && (
-          <form onSubmit={submit} className="space-y-5 pb-28">
+          <form onSubmit={submit} noValidate className="space-y-5 pb-28">
             <section className="rounded-2xl border bg-white p-5 shadow-sm">
               <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                 <div>
@@ -599,7 +601,7 @@ export function CreateCollaboratorPage() {
 
             <div className="fixed inset-x-0 bottom-0 border-t bg-white/95 p-4 shadow-lg backdrop-blur">
               <div className="mx-auto max-w-4xl space-y-3">
-                {missingSubmitRequirements.length > 0 && (
+                {submitAttempted && missingSubmitRequirements.length > 0 && (
                   <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
                     <p className="font-semibold">
                       {t("collaborators.completeToEnable")}
@@ -621,7 +623,7 @@ export function CreateCollaboratorPage() {
                   </Link>
                   <button
                     type="submit"
-                    disabled={createMutation.isPending || !canSubmit}
+                    disabled={createMutation.isPending}
                     title={
                       canSubmit
                         ? t("collaborators.create")

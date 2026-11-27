@@ -18,6 +18,7 @@ export type PrintableReceipt = {
   acceptedAt?: string;
   acceptedBy?: string;
   acceptanceMethod?: string;
+  acceptanceMode?: "BOTH" | "PAPER_ONLY" | "ELECTRONIC_ONLY";
   notes?: string;
   ledgerEntryId: string;
   entryType: string;

@@ -615,12 +615,39 @@ func (r *gormRepository) MarkReceiptAccepted(ctx context.Context, receiptID, acc
 			"status":              "RETURNED",
 			"updated_at":          acceptedAt,
 		}
-		return tx.Model(&db.LedgerReceipt{}).Where("id = ? AND tenant_id = ?", receiptID, tenantctx.TenantID(ctx)).Updates(updates).Error
+		if err := tx.Model(&db.LedgerReceipt{}).Where("id = ? AND tenant_id = ?", receiptID, tenantctx.TenantID(ctx)).Updates(updates).Error; err != nil {
+			return err
+		}
+		client := receiptClientInfoFrom(ctx)
+		return tx.Create(&db.LedgerReceiptAcceptanceEvidence{
+			ReceiptID:         receiptID,
+			TenantID:          tenantctx.TenantID(ctx),
+			AcceptedAt:        acceptedAt,
+			AcceptedIP:        client.IP,
+			AcceptedUserAgent: client.UserAgent,
+		}).Error
 	})
 	if err != nil {
 		return nil, err
 	}
 	return r.FindReceiptByID(ctx, receiptID)
+}
+
+// FindReceiptAcceptanceModeMetadata returns the metadata JSON of the tenant's
+// active RECEIPT_ACCEPTANCE_MODE reference row for the given scope.
+func (r *gormRepository) FindReceiptAcceptanceModeMetadata(ctx context.Context, scope string) (string, bool, error) {
+	var rows []db.ReferenceData
+	err := r.db.WithContext(ctx).
+		Where("tenant_id = ? AND type = ? AND code = ? AND active = ?", tenantctx.TenantID(ctx), receiptAcceptanceModeReferenceType, scope, true).
+		Limit(1).
+		Find(&rows).Error
+	if err != nil {
+		return "", false, err
+	}
+	if len(rows) == 0 {
+		return "", false, nil
+	}
+	return rows[0].MetadataJSON, true, nil
 }
 
 func (r *gormRepository) FindReceiptByID(ctx context.Context, receiptID string) (*db.LedgerReceipt, error) {

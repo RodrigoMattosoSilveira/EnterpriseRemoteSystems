@@ -396,6 +396,22 @@ type LedgerReceipt struct {
 	LedgerEntry  LedgerEntry         `gorm:"foreignKey:LedgerEntryID;constraint:OnUpdate:Restrict,OnDelete:Restrict;" json:"ledgerEntry,omitempty"`
 }
 
+// LedgerReceiptAcceptanceEvidence records the client evidence captured when a
+// receipt is accepted in-app. It is a separate table so the ledger_receipts
+// shape stays unchanged for the Byte 35.4C training fixture digest.
+type LedgerReceiptAcceptanceEvidence struct {
+	ReceiptID         string    `gorm:"type:text;primaryKey" json:"receiptId"`
+	TenantID          string    `gorm:"type:text;not null;index" json:"tenantId"`
+	AcceptedAt        time.Time `gorm:"not null" json:"acceptedAt"`
+	AcceptedIP        string    `gorm:"type:text" json:"-"`
+	AcceptedUserAgent string    `gorm:"type:text" json:"-"`
+	CreatedAt         time.Time `json:"createdAt"`
+}
+
+func (LedgerReceiptAcceptanceEvidence) TableName() string {
+	return "ledger_receipt_acceptance_evidence"
+}
+
 type WorkPeriod struct {
 	BaseModel
 

@@ -19,9 +19,17 @@ const (
 var (
 	ErrReceiptAcceptancePartyMismatch = errors.New("receipt must be accepted by the designated party")
 	ErrReceiptAlreadyAccepted         = errors.New("receipt is already accepted")
-	ErrReceiptNotInAppAcceptable      = errors.New("receipt is not an in-app final-settlement receipt")
+	ErrReceiptNotInAppAcceptable      = errors.New("receipt is not an in-app acceptable receipt")
 	ErrReceiptRequiresInAppAcceptance = errors.New("final-settlement receipt must be accepted in-app by the designated party")
 )
+
+// issuedReceiptStatuses are the statuses after the receipt was presented to the
+// collaborator. A PENDING_ISSUE receipt has not been issued yet.
+var issuedReceiptStatuses = map[string]bool{
+	"ISSUED":  true,
+	"PRINTED": true,
+	"SIGNED":  true,
+}
 
 func (s *service) AcceptReceipt(ctx context.Context, ledgerEntryID, acceptedBy, expectedParty string, req AcceptReceiptRequest) (*PrintableReceiptDTO, error) {
 	if err := ValidateAcceptReceiptRequest(req); err != nil {
@@ -45,8 +53,22 @@ func (s *service) AcceptReceipt(ctx context.Context, ledgerEntryID, acceptedBy, 
 		return nil, ErrReceiptAlreadyReturned
 	}
 	purpose := strings.ToUpper(strings.TrimSpace(receipt.ReceiptPurpose))
-	if purpose != receiptPurposeFinalTenantPayment && purpose != receiptPurposeFinalCollaboratorPayment {
-		return nil, ErrReceiptNotInAppAcceptable
+	isFinalSettlement := purpose == receiptPurposeFinalTenantPayment || purpose == receiptPurposeFinalCollaboratorPayment
+	if !isFinalSettlement {
+		scope := receiptAcceptanceScope(*receipt)
+		if scope == "" {
+			return nil, ErrReceiptNotInAppAcceptable
+		}
+		if !issuedReceiptStatuses[strings.ToUpper(strings.TrimSpace(receipt.Status))] {
+			return nil, ErrReceiptNotIssued
+		}
+		mode, err := s.receiptAcceptanceMode(ctx, scope)
+		if err != nil {
+			return nil, err
+		}
+		if mode == receiptAcceptanceModePaperOnly {
+			return nil, ErrReceiptAcceptanceModeBlocked
+		}
 	}
 	party := strings.ToUpper(strings.TrimSpace(receipt.AcceptingParty))
 	if party == "" || party != strings.ToUpper(strings.TrimSpace(expectedParty)) {

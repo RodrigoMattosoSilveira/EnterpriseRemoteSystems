@@ -195,7 +195,7 @@ export function ReferenceDataAdminPage() {
             <h2 className="text-lg font-semibold text-gray-950">
               {t("reference.fragments.create_6e157c")} {t(referenceDataTypeTranslationKey(selectedType, true))}
             </h2>
-            <ReferenceDataFields value={createForm} onChange={setCreateForm} />
+            <ReferenceDataFields type={selectedType} value={createForm} onChange={setCreateForm} />
             <button
               className="mt-4 w-full rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
               disabled={createMutation.isPending}
@@ -303,7 +303,7 @@ export function ReferenceDataAdminPage() {
                 {t("admin.reference.cancel_77dfd2")}
               </button>
             </div>
-            <ReferenceDataFields value={editForm} onChange={setEditForm} />
+            <ReferenceDataFields type={selectedType} value={editForm} onChange={setEditForm} />
             <button
               className="mt-4 rounded-xl bg-gray-950 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
               disabled={updateMutation.isPending}
@@ -319,13 +319,16 @@ export function ReferenceDataAdminPage() {
 }
 
 function ReferenceDataFields({
+  type,
   value,
   onChange,
 }: {
+  type: string;
   value: ReferenceDataInput;
   onChange: (value: ReferenceDataInput) => void;
 }) {
   const { t } = useI18n();
+  const isAcceptanceMode = type === RECEIPT_ACCEPTANCE_MODE_TYPE;
   return (
     <div className="mt-4 grid gap-3 sm:grid-cols-2">
       <label className="block text-sm font-semibold text-gray-700">
@@ -376,14 +379,33 @@ function ReferenceDataFields({
         {t("admin.reference.active_a733b8")}
       </label>
 
-      <label className="block text-sm font-semibold text-gray-700 sm:col-span-2">
-        {t("admin.reference.metadata.json_b0e4c2")}
-        <textarea
-          className="mt-1 block min-h-20 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
-          value={value.metadataJson ?? ""}
-          onChange={(event) => onChange({ ...value, metadataJson: event.target.value })}
-        />
-      </label>
+      {isAcceptanceMode ? (
+        <label className="block text-sm font-semibold text-gray-700 sm:col-span-2">
+          {t("admin.reference.acceptanceMode")}
+          <select
+            className="mt-1 block w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
+            value={readAcceptanceMode(value.metadataJson)}
+            onChange={(event) =>
+              onChange({ ...value, metadataJson: buildAcceptanceModeMetadata(event.target.value) })
+            }
+          >
+            {RECEIPT_ACCEPTANCE_MODES.map((mode) => (
+              <option key={mode} value={mode}>
+                {mode}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : (
+        <label className="block text-sm font-semibold text-gray-700 sm:col-span-2">
+          {t("admin.reference.metadata.json_b0e4c2")}
+          <textarea
+            className="mt-1 block min-h-20 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
+            value={value.metadataJson ?? ""}
+            onChange={(event) => onChange({ ...value, metadataJson: event.target.value })}
+          />
+        </label>
+      )}
     </div>
   );
 }
@@ -412,6 +434,7 @@ const referenceTypeKeys = {
   task: ["reference.type.tasks", "reference.type.task"],
   expense_category: ["reference.type.expenseCategories", "reference.type.expenseCategory"],
   value_unit: ["reference.type.valueUnits", "reference.type.valueUnit"],
+  receipt_acceptance_mode: ["reference.type.receiptAcceptanceModes", "reference.type.receiptAcceptanceMode"],
 } as const;
 
 type Translate = ReturnType<typeof useI18n>["t"];
@@ -442,6 +465,27 @@ function displayReferenceValue(item: ReferenceDataItem, field: "label" | "descri
 
 function bySortOrderThenLabel(a: ReferenceDataItem, b: ReferenceDataItem) {
   return a.sortOrder - b.sortOrder || a.label.localeCompare(b.label);
+}
+
+// The acceptance mode is chosen from a fixed list and stored as JSON by the
+// screen itself, so users never type the JSON. Keep in sync with the backend.
+const RECEIPT_ACCEPTANCE_MODE_TYPE = "receipt_acceptance_mode";
+const RECEIPT_ACCEPTANCE_MODES = ["BOTH", "PAPER_ONLY", "ELECTRONIC_ONLY"] as const;
+
+function buildAcceptanceModeMetadata(mode: string): string {
+  return JSON.stringify({ mode });
+}
+
+function readAcceptanceMode(metadataJson: string | undefined): string {
+  try {
+    const parsed = JSON.parse(metadataJson || "{}") as { mode?: unknown };
+    if (typeof parsed.mode === "string" && (RECEIPT_ACCEPTANCE_MODES as readonly string[]).includes(parsed.mode)) {
+      return parsed.mode;
+    }
+  } catch {
+    // Fall through to the default shown in the select.
+  }
+  return "BOTH";
 }
 
 function toPayload(input: ReferenceDataInput): ReferenceDataInput {

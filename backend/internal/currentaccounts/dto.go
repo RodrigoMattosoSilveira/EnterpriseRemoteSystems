@@ -376,6 +376,7 @@ type PrintableReceiptDTO struct {
 	AcceptedAt            string  `json:"acceptedAt,omitempty"`
 	AcceptedBy            string  `json:"acceptedBy,omitempty"`
 	AcceptanceMethod      string  `json:"acceptanceMethod,omitempty"`
+	AcceptanceMode        string  `json:"acceptanceMode,omitempty"`
 	Notes                 string  `json:"notes,omitempty"`
 	LedgerEntryID         string  `json:"ledgerEntryId"`
 	EntryType             string  `json:"entryType"`
