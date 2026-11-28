@@ -637,8 +637,13 @@ bite3368-integrated-check: bite3368-core-check
 	$(MAKE) production-credential-cutover-check
 	$(MAKE) production-release-evidence-check
 
+.PHONY: byte357b-launch-check
+byte357b-launch-check:
+	python3 -B scripts/test-byte357b-launch.py
+
 .PHONY: promotion-readiness-check
 promotion-readiness-check:
+	$(MAKE) byte357b-launch-check
 	$(MAKE) bite3368-core-check
 	$(MAKE) two-human-administrators-preflight-check
 	$(MAKE) production-environment-guardrails-check
@@ -658,6 +663,7 @@ promotion-readiness-check:
 
 .PHONY: local-check
 local-check:
+	$(MAKE) byte357b-launch-check
 	$(MAKE) byte352-i18n-check
 	$(MAKE) bite3368-core-check
 	$(MAKE) two-human-administrators-check

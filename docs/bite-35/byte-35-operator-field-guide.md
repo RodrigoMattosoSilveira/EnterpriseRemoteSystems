@@ -2,7 +2,7 @@
 
 **Audience:** two authorized humans who did not write ERS. **Status:** operating instructions, **not** evidence of tests being performed. **Applies to:** 35.5 T01–T10, 35.6 T01–T10, and the separately developed 35.7 T01–T10. Read this **before** any operational test. No Production action is authorized by this guide.
 
-**Source control boundary:** 35.5 and 35.6 documents are present in the committed `1078-bite-356-application-administrator-and-operational-runbooks` ZIP. Bite 35.7 software/manual were prepared on the separate `1082-production-launch-verification-and-activation` branch; they do not exist in the 1078 ZIP. Do **not** run `make byte357-launch-check` or a 35.7 authorization command in 1078, and do not copy its patch onto 1078. Recheck the actual committed SHA/ZIP after merging these branches. When 35.7 is present, use its runbook and manual together with this guide.
+**Source control boundary:** 35.5 and 35.6 documents originated with `1078-bite-356-application-administrator-and-operational-runbooks`. The earlier proposed `1082-production-launch-verification-and-activation` branch had no unique code; its planned `byte357-launch-check` and `ers-byte357-launch.py` were **not** shipped in the accepted source. If you encounter an obsolete 1082 patch, **do not copy its patch onto 1078**; instead use the bounded 1168-based implementation. The authoritative implemented 35.7B offline contract is delivered on `1168-bite-357b-production-acceptance-and-go-live` against baseline `04c0cfd91ad37d05383f2200b33d1ecb1421e826`, using `make byte357b-launch-check`, `scripts/ers-byte357b-launch.py`, [35.7B operator runbook](byte-35-7b-production-go-live.md) and [35.7B manual acceptance T01–T10](byte-35-7b-manual-acceptance.md). Record the actual committed SHA/tree after patch application and promotion. These offline checks never authorize Production.
 
 ## A. First decision: who is doing what?
 
@@ -273,7 +273,7 @@ openssl dgst -sha256 -verify "$PUBLIC_KEY" -signature "$SIGNATURE" "$APPROVAL"
 | **35.6 T08** | Authorized recovery operator: `docs/database-recovery-runbook.md` and 33.6 rehearsal with **real** Test/isolated backup receipt, UTC start/end, RPO/RTO ≤24h/4h, scoped teardown | BLOCKED if no approved source or isolated run |
 | **35.6 T09** | A and B: separate software vs operational decisions; T06–T08 must actually be observed for Production operational PASS | STOP/NO-GO on incomplete human gates |
 | **35.6 T10** | A and independent Linux developer: `make local-fixtures-ensure`, then `make local-fixtures-check`; confirm 11 exact fixture identities and password custody, no database reset | BLOCKED if independent Linux result/credentials absent |
-| **35.7 T01** | A, on **1082 only once implemented**: `make byte357-launch-check`, LOCAL/promotion suite and exact CI | BLOCKED in 1078, because code not present |
+| **35.7 T01** | A, **after 1168 patch implementation**: `make byte357b-launch-check`, LOCAL/promotion suite and exact CI | BLOCKED until current checkout contains implementation and matching CI |
 | **35.7 T02** | Release operator + Test role users: actual deployed Test SHA/tree, HTTPS health, migrations, smoke, 35.5 B Test rehearsal | BLOCKED if deployed/financial rehearsal incomplete |
 | **35.7 T03** | Security reviewer + Production GLOBAL admin: approved read-only Prod checks, HTTPS, Tenant isolation and enforced pilot account admission | BLOCKED if permissions/admission cannot be demonstrated |
 | **35.7 T04** | Authorized Production DB operator + B: approved 35.5 **Production read-only plan**, migration preservation, no actual import yet | BLOCKED if backup/source/approval missing |
@@ -286,25 +286,25 @@ openssl dgst -sha256 -verify "$PUBLIC_KEY" -signature "$SIGNATURE" "$APPROVAL"
 
 ## F. Additional 35.7 evidence terms and how to obtain them
 
-These fields are used **only on the 1082 implementation after its patch is committed and the current HEAD ZIP is supplied**; the commands below are not executable against the 1078 branch.
+These fields are used **only on the implemented 1168-based 35.7B candidate after its patch is committed and the current HEAD ZIP is supplied**; the commands below are not executable against the 1078 branch.
 
 | Term | Meaning / source |
 |---|---|
 | **Six launch gates** | The six frozen IDs in `docs/bite-35/launch-baseline.json`: release integrity, security, data preservation, backup/restore, operational continuity and administrator recovery. A code PASS does not imply these external gates PASS |
-| **Launch evidence manifest (`launch.json`)** | Protected operator JSON that indexes real observations, source references and hashes for every check, using `docs/bite-35/byte-35-7-evidence.template.json` as a **blocked** starting point |
+| **Launch evidence manifest (`launch.json`)** | Protected operator JSON that indexes real observations, source references and hashes for every check, using `python3 -B scripts/ers-byte357b-launch.py init` as a **BLOCKED** starting point |
 | **Source observation** | One non-secret JSON record for one check, naming its real observer, UTC time, environment, exact SHA/tree and evidence URL/ticket, with required `details`. Create only after actually examining original evidence |
 | **Source/reference URL** | The approved ticket, GitHub Actions run, backup receipt record or protected audit source that the reviewer can independently retrieve. A typed sentence is not primary evidence |
-| **`release_revision` / `release_tree_sha`** | Target **deployed** Production Git commit SHA/tree, independently compared to deployment evidence; do not copy the local 1082 feature-branch SHA unless it really is approved/deployed |
+| **`release_revision` / `release_tree_sha`** | Target **deployed** Production Git commit SHA/tree, independently compared to deployment evidence; do not copy any unapproved feature-branch SHA as evidence of a deployed release |
 | **Manifest SHA-256** | SHA-256 of exact finished `launch.json` bytes; `sha256sum launch.json` on Linux, `shasum -a 256 launch.json` on Mac; cannot change after signature |
 | **Off-host object version** | Actual immutable/versioned Production S3 object version from the verified 33.3 off-host receipt; do not invent it or substitute an on-host backup filename |
 | **RPO / RTO** | **Measured** age of recoverable backup and actual time to restore usable service; 35.7 limits are 86,400/14,400 seconds; record start/end time and source independent of the claim |
-| **Approval receipt** | Output of 35.7 `authorize` after two independent signed approval records; **NOT ACTIVATED**, no deploy/DB changes |
+| **Approval receipt** | Output of 35.7B `authorize` after two independent signed approval records; **NOT ACTIVATED**, no deploy/DB changes |
 | **Pilot admission containment** | Evidence that unapproved customer Accounts cannot sign in/enter Production; no new activation toggle exists in this bite. If existing controls cannot enforce it, STOP/NO-GO |
 | **GitHub Production Environment approval rule** | Real repository Settings → Environments → `production` protection settings, including effective required reviewers for push-triggered `deploy.yml`. YAML mentions an Environment but cannot prove reviewer enforcement. If you cannot inspect protection, STOP/NO-GO |
 
-### 35.7 CLI values (once 1082 is actually available)
+### 35.7B CLI values (after applying and committing the 1168 patch)
 
-Run `python3 -B scripts/ers-byte357-launch.py verify --help` and `authorize --help` in the **matching 1082 checkout**. `verify` requires `--evidence`, `--expected-revision`, and `--expected-tree-sha` from independently checked Production release evidence. `authorize` additionally needs two protected signed approval files, their signatures, their public PEM files, **two independently trusted** public-key SHA-256 fingerprints, and a new protected output receipt path. The exact commands are in `docs/bite-35/byte-35-7-operational-runbook.md`; never copy a sample timestamp, identity or placeholder into real evidence. **Do not mark T08/T09 PASS from software-only fabricated artifacts.**
+Run `python3 -B scripts/ers-byte357b-launch.py verify --help` and `authorize --help` in the **matching 1168-derived checkout**. `verify` requires `--evidence`, `--expected-revision`, and `--expected-tree-sha` from independently checked Production release evidence. `authorize` additionally needs two protected signed approval files, their signatures, their public PEM files, **two independently trusted** public-key SHA-256 fingerprints, and a new protected output receipt path. The exact commands are in `docs/bite-35/byte-35-7b-production-go-live.md`; never copy a sample timestamp, identity or placeholder into real evidence. **Do not mark T08/T09 PASS from software-only fabricated artifacts.**
 
 ## G. Common stopping, cleanup and report rules
 

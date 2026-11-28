@@ -80,3 +80,7 @@ DEV database replacement, Test rehearsal reset, Production opening balances, or 
 support access. See [TRN deployment and operator runbook](byte-35-6s1a-trn-deployment.md)
 and [TRN manual acceptance](byte-35-6s1a-manual-acceptance.md).
 TRN deployment is independent of Production launch authorization.
+
+## Bite 35.7B — Production Acceptance and Go-Live evidence contract
+
+The 35.7B implementation is documented in [the controlled operator runbook](byte-35-7b-production-go-live.md) and [manual acceptance T01–T10](byte-35-7b-manual-acceptance.md). `make byte357b-launch-check` runs isolated offline fail-closed checks; `scripts/ers-byte357b-launch.py init/verify/authorize` only prepares private evidence, checks source-file hashes and verifies two independently signed approval records. Neither a checker PASS nor a signed receipt deploys software, grants access or establishes that actual humans and recovery sources were observed. Production remains **NO-GO** until all frozen six launch gates, the actual 35.5 Test financial rehearsal and separate Production import authorization (if needed), 35.6 human recovery acceptance, independent change authorization, GitHub Production protection and bounded first-customer pilot are verified by the authorized people. Issue #1166 for Production Customer Support is deferred until after go-live; 33.6.8E/F remains deferred hardening, never a waiver of the minimum backup/restore gate.
